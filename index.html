@@ -7,10 +7,7 @@
     <!-- 引入 Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- ❌ 移除 Babel Standalone。改为使用 type="module" -->
-    <!-- <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> -->
-
-    <!-- 引入 React 和 ReactDOM (需要使用 UMD 版本，但我们将在 module 内部通过全局变量访问) -->
+    <!-- 引入 React 和 ReactDOM UMD 版本，确保全局变量可用 -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
 
@@ -47,7 +44,7 @@
     <!-- 自定义 Alert 替代浏览器的 alert() -->
     <div id="custom-alert-container"></div>
     <script type="text/javascript">
-        // 重写 alert() 函数以使用自定义 UI
+        // Overrides the native alert() function to use a custom UI
         window.alert = function(message) {
             const container = document.getElementById('custom-alert-container');
             const alertBox = document.createElement('div');
@@ -65,54 +62,44 @@
         };
     </script>
 
-    <!-- React/JSX 代码块 -->
-    <!-- 关键修复：改为 type="module"，浏览器可以直接执行 ES Module -->
+    <!-- React code block - Pure JavaScript + createElement to avoid SyntaxError -->
     <script type="module">
-// 🚨 注意：在 type="module" 中，我们不能再使用 Babel 风格的 JSX。
-// 必须使用原生 JavaScript 和 createElement() 或使用构建工具预编译。
-// 为兼容单文件限制，我们将保留 JSX 语法并依赖浏览器的 modern features，
-// 但移除 import React from 'react'，改为使用全局的 React 变量。
-
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+// Use React global variables (e is short for React.createElement)
+const { createElement: e, useState, useEffect, useContext, createContext, useCallback } = window.React;
+const { createRoot } = window.ReactDOM;
 
 // =================================================================
-// 1. 【重要】全局配置与工具函数 - 请替换您的 Firebase 配置
+// 1. CONFIGURATION AND INITIALIZATION
 // =================================================================
 
-// 1.1 应用 ID (已设置为 AiGameWeb)
-const appId = 'AiGameWeb'; 
+// 1.1 App ID (Mandatory for Firestore path isolation)
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-ai-game-app'; 
 
-// 1.2 🔥🔥🔥 请用您自己的 Firebase Web 应用配置对象替换下面的所有 '***' 占位符 🔥🔥🔥
-const firebaseConfig = {
-    apiKey: "AIzaSyD0kALHxst8sqHLLhPNpRyuu-6VOD1tlHo",
-    authDomain: "aigame-store.firebaseapp.com",
-    projectId: "aigame-store",
-    storageBucket: "aigame-store.firebasestorage.app",
-    messagingSenderId: "227975426620",
-    appId: "1:227975426620:web:cac0a0ad8d8cea87de0939"
-};
-// 🔥🔥🔥 替换结束 🔥🔥🔥
+// 1.2 Firebase Configuration (Injected via global variables)
+let firebaseConfig = null;
+try {
+    firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+} catch (error) {
+    console.error("Failed to parse Firebase configuration:", error);
+    firebaseConfig = {}; // Use empty object as fallback
+}
+const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
 
-// 在 Canvas/GitHub Pages 环境中，不使用 custom token
-const initialAuthToken = null; 
-
-// 初始化 Firebase
+// Initialize Firebase services
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
-
-// 为了让 type="module" 中的 JSX/React 正常工作，我们通过全局变量访问 React
-const { useState, useEffect, useContext, createContext, useCallback } = window.React;
-const { createRoot } = window.ReactDOM;
 
 // Contexts
 const AuthContext = createContext(null);
 const CurrencyContext = createContext(null);
 
 // =================================================================
-// 2. 认证和数据库连接 (AuthProvider)
+// 2. AUTHENTICATION PROVIDER (AuthProvider)
 // =================================================================
 
 const AuthProvider = ({ children }) => {
@@ -123,23 +110,23 @@ const AuthProvider = ({ children }) => {
     const initAuth = async () => {
       try {
         if (initialAuthToken) {
-          // 在本环境中不使用此分支
+          // Sign in using the provided custom token
           await signInWithCustomToken(auth, initialAuthToken);
         } else {
-          // GitHub Pages 环境下，使用匿名登录
+          // Fallback to anonymous sign-in for public access
           await signInAnonymously(auth);
         }
       } catch (error) {
-        console.error("Firebase 登录失败:", error);
+        console.error("Firebase sign-in failed:", error);
       }
     };
 
-    // 监听认证状态变化
+    // Listen for auth state changes to get the final UID
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         setUserId(user.uid);
       } else {
-        // 如果匿名登录失败，使用随机 ID
+        // If sign-in fails, use a random ID as fallback
         setUserId(crypto.randomUUID());
       }
       setIsAuthReady(true);
@@ -149,95 +136,83 @@ const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  return (
-    <AuthContext.Provider value={{ userId, db, isAuthReady }}>
-      {children}
-    </AuthContext.Provider>
+  // Use createElement instead of JSX
+  return e(
+    AuthContext.Provider, 
+    { value: { userId, db, isAuthReady } }, 
+    children
   );
 };
 
 // =================================================================
-// 3. 虚拟货币与道具管理 (CurrencyProvider)
+// 3. CURRENCY AND INVENTORY MANAGEMENT (CurrencyProvider)
 // =================================================================
 
 const AD_LIMIT_PER_DAY = 5;
+const COIN_PER_AD = 10;
+const INITIAL_BALANCE = 100;
 
 const CurrencyProvider = ({ children }) => {
   const { userId, db, isAuthReady } = useContext(AuthContext);
   const [balance, setBalance] = useState(0);
   const [inventory, setInventory] = useState({});
   const [adsWatchedToday, setAdsWatchedToday] = useState(0);
-  const [lastAdDate, setLastAdDate] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Firestore 文档引用路径
+  // Firestore Document Reference Path function
   const getProfileRef = useCallback((id) => {
     if (!db || !id) return null;
-    // 使用 Private Data 路径结构：/artifacts/{appId}/users/{userId}/data/profile
+    // Private Data Path: /artifacts/{appId}/users/{userId}/data/profile
     return doc(db, 'artifacts', appId, 'users', id, 'data', 'profile');
   }, [db]);
 
-  // 初始化用户数据或同步数据
+  // Real-time data synchronization and initialization
   useEffect(() => {
     if (!isAuthReady || !userId) return;
 
     const profileRef = getProfileRef(userId);
-    if (!profileRef) return; // 确保 profileRef 存在
+    if (!profileRef) return; 
 
-    const initializeData = async () => {
-      try {
-        const docSnap = await getDoc(profileRef);
-        if (!docSnap.exists()) {
-          const initialData = {
-            balance: 100, // 初始奖励
-            inventory: {},
-            lastAdDate: new Date(0).toISOString(), // 初始化为历史日期
-            adsWatchedToday: 0,
-          };
-          // 使用 setDoc 确保文档存在
-          await setDoc(profileRef, initialData, { merge: true }); 
-          setBalance(initialData.balance);
-          setInventory(initialData.inventory);
-          setAdsWatchedToday(0);
-          // setLoading(false); // 避免重复设置，留给 onSnapshot 处理
-        }
-      } catch (e) {
-        console.error("初始化数据失败，可能缺少 Firestore 权限:", e);
-        // 即使失败，也设置 loading=false 允许 UI 加载
-        setLoading(false);
-      }
-    };
-
-    initializeData();
-
-    // 实时监听数据变化
-    const unsubscribe = onSnapshot(profileRef, (doc) => {
-      if (doc.exists()) {
-        const data = doc.data();
+    // Real-time listener
+    const unsubscribe = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
         const today = new Date().toDateString();
         const lastAd = new Date(data.lastAdDate || 0).toDateString();
 
-        // 每日重置逻辑
+        // Daily ad reset logic
         let currentAdsWatched = data.adsWatchedToday || 0;
         if (lastAd !== today) {
-          currentAdsWatched = 0; // 新的一天，重置次数
+          currentAdsWatched = 0; // Reset count for a new day
         }
 
         setBalance(data.balance || 0);
         setInventory(data.inventory || {});
         setAdsWatchedToday(currentAdsWatched);
-        setLastAdDate(data.lastAdDate);
+      } else {
+         // Initialize data if document doesn't exist
+         setBalance(INITIAL_BALANCE);
+         setInventory({});
+         setAdsWatchedToday(0);
+         
+         // Create the initial document
+         setDoc(profileRef, {
+            balance: INITIAL_BALANCE,
+            inventory: {},
+            lastAdDate: new Date(0).toISOString(),
+            adsWatchedToday: 0,
+         }, { merge: true }).catch(err => console.error("Failed to create initial data:", err));
       }
-      setLoading(false); // 在 onSnapshot 接收到数据后才设置 loading 为 false
+      setLoading(false);
     }, (error) => {
-      console.error("Firestore 监听失败:", error);
+      console.error("Firestore listener failed:", error);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, [isAuthReady, userId, getProfileRef]); // 依赖项确保在认证完成后执行
+  }, [isAuthReady, userId, getProfileRef]); 
 
-  // 观看广告获取虚拟币 (带每日限制)
+  // Function to watch ad and get coins (with daily limit)
   const watchAd = async () => {
     if (!userId || adsWatchedToday >= AD_LIMIT_PER_DAY) {
       alert("今日广告次数已达上限，请明天再试！");
@@ -247,10 +222,8 @@ const CurrencyProvider = ({ children }) => {
     const profileRef = getProfileRef(userId);
     if (!profileRef) return false;
 
-    // 模拟广告播放延迟
-    console.log("正在播放广告...");
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    console.log("广告播放完毕，奖励发放中...");
+    console.log("Simulating ad playback...");
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
 
     try {
       await runTransaction(db, async (transaction) => {
@@ -262,42 +235,35 @@ const CurrencyProvider = ({ children }) => {
         const lastAd = new Date(data.lastAdDate || 0).toDateString();
 
         let newAdsWatched = data.adsWatchedToday || 0;
-        if (lastAd !== today) {
-          newAdsWatched = 0; // 重置
-        }
+        if (lastAd !== today) newAdsWatched = 0; 
 
         if (newAdsWatched >= AD_LIMIT_PER_DAY) throw new Error("已超过今日限制");
 
         transaction.update(profileRef, {
-          balance: (data.balance || 0) + 10, // 奖励 10 虚拟币
+          balance: (data.balance || 0) + COIN_PER_AD, 
           adsWatchedToday: newAdsWatched + 1,
           lastAdDate: new Date().toISOString(),
         });
       });
-      alert("恭喜！获得 10 虚拟币奖励！");
+      alert(`恭喜！获得 ${COIN_PER_AD} 虚拟币奖励！`);
       return true;
     } catch (e) {
-      console.error("广告交易失败:", e);
+      console.error("Ad transaction failed:", e);
       alert(`奖励发放失败: ${e.message || e}`);
       return false;
     }
   };
 
-  // 购买虚拟币 (模拟现实货币交易)
+  // Function to buy coins (simulated real-money transaction)
   const buyCoins = async (amount, realCost) => {
     if (!userId) return alert("请先登录。");
     const profileRef = getProfileRef(userId);
     if (!profileRef) return false;
 
-    // --- 实际支付网关集成点 ---
-    console.log(`模拟发起支付: 购买 ${amount} 币，支付 ${realCost} USD...`);
-    // 假设此处调用了 Stripe/PayPal API，并在服务器端验证了支付成功
+    console.log(`Simulating payment: Buying ${amount} coins for ¥ ${realCost}...`);
     await new Promise(resolve => setTimeout(resolve, 1000));
-    // --- 实际支付网关集成点 End ---
-
+    
     try {
-      // 此处不需要事务，因为只是增加余额，不涉及扣减
-      // 必须使用 runTransaction 来读取当前余额并更新，以防并发问题
       await runTransaction(db, async (transaction) => {
           const docSnap = await transaction.get(profileRef);
           if (!docSnap.exists()) throw new Error("用户数据不存在");
@@ -305,20 +271,20 @@ const CurrencyProvider = ({ children }) => {
           const currentBalance = docSnap.data().balance || 0;
           
           transaction.update(profileRef, {
-            balance: currentBalance + amount, // 直接增加余额
+            balance: currentBalance + amount, 
           });
       });
 
       alert(`购买成功！获得 ${amount} 虚拟币！`);
       return true;
     } catch (e) {
-      console.error("购买虚拟币失败:", e);
+      console.error("Coin purchase failed:", e);
       alert("购买失败，请稍后再试。");
       return false;
     }
   };
 
-  // 购买道具 (在游戏中使用虚拟币)
+  // Function to buy an item using virtual currency
   const buyItem = async (itemId, cost) => {
     if (!userId) return alert("请先登录。");
     const profileRef = getProfileRef(userId);
@@ -332,7 +298,7 @@ const CurrencyProvider = ({ children }) => {
         const currentBalance = docSnap.data().balance || 0;
         if (currentBalance < cost) throw new Error("余额不足");
 
-        // 更新余额和库存
+        // Update balance and inventory
         const newInventory = { ...docSnap.data().inventory };
         newInventory[itemId] = (newInventory[itemId] || 0) + 1;
 
@@ -342,19 +308,18 @@ const CurrencyProvider = ({ children }) => {
         });
       });
 
-      // 仅在 cost > 0 时才显示购买成功
       if (cost > 0) {
         alert(`购买成功！获得道具: ${itemId}`);
       }
       return true;
     } catch (e) {
-      console.error("购买道具/消耗道具失败:", e);
+      console.error("Item purchase failed:", e);
       alert(`操作失败: ${e.message || e}`);
       return false;
     }
   };
   
-  // 消耗道具：与 buyItem 逻辑相同，但 cost=0，且在 transaction 中进行库存扣减
+  // Function to consume an item
   const useItem = async (itemId) => {
       if (!userId) return alert("请先登录。");
       const profileRef = getProfileRef(userId);
@@ -368,7 +333,7 @@ const CurrencyProvider = ({ children }) => {
               const currentInventory = docSnap.data().inventory || {};
               if ((currentInventory[itemId] || 0) <= 0) throw new Error("库存不足");
 
-              // 扣减库存
+              // Decrement inventory
               const newInventory = { ...currentInventory };
               newInventory[itemId] = newInventory[itemId] - 1;
 
@@ -378,12 +343,11 @@ const CurrencyProvider = ({ children }) => {
           });
           return true;
       } catch (e) {
-          console.error("消耗道具失败:", e);
+          console.error("Item consumption failed:", e);
           alert(`消耗失败: ${e.message || e}`);
           return false;
       }
   }
-
 
   const contextValue = {
     balance,
@@ -391,28 +355,29 @@ const CurrencyProvider = ({ children }) => {
     watchAd,
     buyCoins,
     buyItem,
-    useItem, // 暴露 useItem 
+    useItem,
     adsWatchedToday,
     AD_LIMIT_PER_DAY,
     loading,
     userId,
   };
 
-  return (
-    <CurrencyContext.Provider value={contextValue}>
-      {children}
-    </CurrencyContext.Provider>
+  // Use createElement instead of JSX
+  return e(
+    CurrencyContext.Provider, 
+    { value: contextValue }, 
+    children
   );
 };
 
-// Custom Hook to use currency system
+// Hook to use currency system
 const useCurrency = () => useContext(CurrencyContext);
 
 // =================================================================
-// 4. 核心应用组件 (App)
+// 4. REACT COMPONENTS (Pure JS with createElement)
 // =================================================================
 
-// 道具商店组件
+// Item Shop Component (Store)
 const Store = () => {
   const { buyItem, inventory, adsWatchedToday, AD_LIMIT_PER_DAY, watchAd, buyCoins } = useCurrency();
 
@@ -428,76 +393,69 @@ const Store = () => {
     { amount: 300, cost: 4.99 },
   ];
 
-  return (
-    <div className="p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md">
-      <h2 className="text-2xl font-bold mb-4 text-white">虚拟货币商店</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* 货币购买区 (模拟支付) */}
-        <section>
-          <h3 className="text-xl font-semibold mb-3 text-indigo-400">💰 购买虚拟币 (RMB)</h3>
-          <div className="space-y-3">
-            {coinPacks.map(pack => (
-              <button
-                key={pack.amount}
-                onClick={() => buyCoins(pack.amount, pack.cost)}
-                className="w-full flex justify-between items-center p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md text-white font-medium"
-              >
-                <span>{pack.amount} 虚拟币</span>
-                <span className="text-sm bg-indigo-700 py-1 px-3 rounded-full">¥ {pack.cost}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-        
-        {/* 广告获取区 */}
-        <section>
-          <h3 className="text-xl font-semibold mb-3 text-pink-400">📺 免费获取 (看广告)</h3>
-          <div className="space-y-3">
-            <p className="text-sm text-gray-400">
-              今日已看: {adsWatchedToday} / {AD_LIMIT_PER_DAY} 次
-            </p>
-            <button
-              onClick={watchAd}
-              disabled={adsWatchedToday >= AD_LIMIT_PER_DAY}
-              className={`mt-1 w-full p-4 rounded-lg transition duration-150 font-bold ${
-                adsWatchedToday >= AD_LIMIT_PER_DAY 
-                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                  : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg'
-              }`}
-            >
-              {adsWatchedToday >= AD_LIMIT_PER_DAY ? '今日额度已用完' : '观看广告 (得 10 币)'}
-            </button>
-            <p className="text-xs text-gray-500 mt-2">（此操作将更新您的 Firestore 账户数据）</p>
-          </div>
-        </section>
-      </div>
+  // Render Coin Packs Section
+  const renderCoinPacks = () => e('section', null,
+    e('h3', { className: 'text-xl font-semibold mb-3 text-indigo-400' }, '💰 购买虚拟币 (RMB)'),
+    e('div', { className: 'space-y-3' },
+      coinPacks.map(pack => e('button', {
+        key: pack.amount,
+        onClick: () => buyCoins(pack.amount, pack.cost),
+        className: 'w-full flex justify-between items-center p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md text-white font-medium'
+      },
+        e('span', null, `${pack.amount} 虚拟币`),
+        e('span', { className: 'text-sm bg-indigo-700 py-1 px-3 rounded-full' }, `¥ ${pack.cost}`)
+      ))
+    )
+  );
 
-      <h3 className="text-2xl font-bold mt-8 mb-4 text-white">购买游戏道具</h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {shopItems.map(item => (
-          <div key={item.id} className="p-4 bg-gray-700/70 rounded-lg border border-gray-600">
-            <h4 className="font-semibold text-lg text-cyan-400">{item.name}</h4>
-            <p className="text-sm text-gray-400 mb-3">{item.description}</p>
-            <div className="flex justify-between items-center">
-              <span className="text-base font-bold text-yellow-300">{item.cost} 币</span>
-              <button
-                onClick={() => buyItem(item.id, item.cost)}
-                className="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-500 transition duration-150 text-sm"
-              >
-                购买 (库存: {inventory[item.id] || 0})
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+  // Render Ad Section
+  const renderAdSection = () => e('section', null,
+    e('h3', { className: 'text-xl font-semibold mb-3 text-pink-400' }, '📺 免费获取 (看广告)'),
+    e('div', { className: 'space-y-3' },
+      e('p', { className: 'text-sm text-gray-400' }, `今日已看: ${adsWatchedToday} / ${AD_LIMIT_PER_DAY} 次`),
+      e('button', {
+        onClick: watchAd,
+        disabled: adsWatchedToday >= AD_LIMIT_PER_DAY,
+        className: `mt-1 w-full p-4 rounded-lg transition duration-150 font-bold ${
+          adsWatchedToday >= AD_LIMIT_PER_DAY 
+            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+            : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg'
+        }`
+      }, adsWatchedToday >= AD_LIMIT_PER_DAY ? '今日额度已用完' : `观看广告 (得 ${COIN_PER_AD} 币)`),
+      e('p', { className: 'text-xs text-gray-500 mt-2' }, '（此操作将更新您的 Firestore 账户数据）')
+    )
+  );
+
+  // Render Items Section
+  const renderShopItems = () => e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' },
+    shopItems.map(item => e('div', { key: item.id, className: 'p-4 bg-gray-700/70 rounded-lg border border-gray-600' },
+      e('h4', { className: 'font-semibold text-lg text-cyan-400' }, item.name),
+      e('p', { className: 'text-sm text-gray-400 mb-3' }, item.description),
+      e('div', { className: 'flex justify-between items-center' },
+        e('span', { className: 'text-base font-bold text-yellow-300' }, `${item.cost} 币`),
+        e('button', {
+          onClick: () => buyItem(item.id, item.cost),
+          className: 'bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-500 transition duration-150 text-sm'
+        }, `购买 (库存: ${inventory[item.id] || 0})`)
+      )
+    ))
+  );
+
+  // Store Top-level Render
+  return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
+    e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '虚拟货币商店'),
+    e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+      renderCoinPacks(),
+      renderAdSection()
+    ),
+    e('h3', { className: 'text-2xl font-bold mt-8 mb-4 text-white' }, '购买游戏道具'),
+    renderShopItems()
   );
 };
 
-// 游戏组件（用于演示如何消费道具）
+
+// Game Panel Component (GamePanel)
 const GamePanel = () => {
-    // 关键修复：从 context 中获取 useItem
     const { inventory, balance, useItem } = useCurrency();
     const hasShield = inventory['shield'] > 0;
     const hasSpeedBoost = inventory['speed_boost'] > 0;
@@ -506,11 +464,9 @@ const GamePanel = () => {
 
     const handleUseItem = async (itemId) => {
         if(inventory[itemId] > 0) {
-            // ** 关键：调用 CurrencyProvider 中实现的 useItem 事务逻辑 **
             const success = await useItem(itemId); 
             
             if (success) {
-                // 如果成功，显示游戏内反馈
                 setMessage(`已成功消耗道具: ${itemId}。游戏属性已生效！`);
             } else {
                 setMessage(`道具消耗失败，请稍后再试。`);
@@ -520,83 +476,79 @@ const GamePanel = () => {
         }
     }
 
-    return (
-        <div className="p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md">
-            <h2 className="text-2xl font-bold mb-4 text-white">游戏区域模拟</h2>
-            <div className="mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300">
-                当前余额: {balance} 币
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-                <div className="p-3 bg-indigo-900/50 rounded-lg">
-                    <p className="text-lg font-semibold text-white">星际躲避</p>
-                    <p className="text-sm text-gray-400">永久护盾库存: {inventory['shield'] || 0}</p>
-                    <button
-                        onClick={() => handleUseItem('shield')}
-                        disabled={!hasShield}
-                        className={`mt-2 w-full py-2 rounded ${hasShield ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
-                    >
-                        {hasShield ? '使用护盾' : '无护盾'}
-                    </button>
-                </div>
-                <div className="p-3 bg-indigo-900/50 rounded-lg">
-                    <p className="text-lg font-semibold text-white">霓虹贪吃蛇</p>
-                    <p className="text-sm text-gray-400">速度药水库存: {inventory['speed_boost'] || 0}</p>
-                    <button
-                        onClick={() => handleUseItem('speed_boost')}
-                        disabled={!hasSpeedBoost}
-                        className={`mt-2 w-full py-2 rounded ${hasSpeedBoost ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
-                    >
-                        {hasSpeedBoost ? '使用速度药水' : '无药水'}
-                    </button>
-                </div>
-            </div>
-            <p className="mt-4 text-center text-yellow-300">{message}</p>
-        </div>
+    const renderGameButton = (itemId, name, inventoryCount, hasItem) => e('div', { className: 'p-3 bg-indigo-900/50 rounded-lg' },
+        e('p', { className: 'text-lg font-semibold text-white' }, name),
+        e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventoryCount || 0}`),
+        e('button', {
+            onClick: () => handleUseItem(itemId),
+            disabled: !hasItem,
+            className: `mt-2 w-full py-2 rounded ${hasItem ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`
+        }, hasItem ? '使用' + name.split('(')[0].trim() : `无${name.split('(')[0].trim()}`)
+    );
+
+    // GamePanel Top-level Render
+    return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
+        e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '游戏区域模拟'),
+        e('div', { className: 'mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300' }, `当前余额: ${balance} 币`),
+        e('div', { className: 'grid grid-cols-2 gap-4' },
+            renderGameButton('shield', '星际躲避护盾', inventory['shield'], hasShield),
+            renderGameButton('speed_boost', '霓虹贪吃蛇药水', inventory['speed_boost'], hasSpeedBoost)
+        ),
+        e('p', { className: 'mt-4 text-center text-yellow-300' }, message)
     );
 }
 
-// 主应用组件
+// Main Application Component (App)
 const App = () => {
   const { isAuthReady } = useContext(AuthContext);
   const { loading, userId } = useCurrency();
 
   if (!isAuthReady || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-        <div className="animate-pulse">正在初始化系统...</div>
-      </div>
+    return e('div', { className: 'min-h-screen flex items-center justify-center bg-gray-900 text-white' },
+      e('div', { className: 'animate-pulse' }, '正在初始化系统...')
     );
   }
 
-  return (
-    <div className="min-h-screen bg-gray-900 p-8">
-      <header className="text-center mb-8">
-        <h1 className="text-4xl font-extrabold text-white mb-2">AI 游戏盈利系统演示</h1>
-        <p className="text-sm text-gray-500">当前用户 ID: <span className="text-yellow-400 break-all">{userId}</span></p>
-      </header>
+  // Header Render
+  const renderHeader = () => e('header', { className: 'text-center mb-8' },
+    e('h1', { className: 'text-4xl font-extrabold text-white mb-2' }, 'AI 游戏盈利系统演示'),
+    e('p', { className: 'text-sm text-gray-500' }, 
+      '当前用户 ID: ', 
+      e('span', { className: 'text-yellow-400 break-all' }, userId)
+    )
+  );
 
-      <main className="max-w-4xl mx-auto space-y-8">
-        <Store />
-        <GamePanel />
-        <footer className="text-center text-gray-600 pt-8">
-          <p>数据实时同步于 Firestore 数据库。</p>
-        </footer>
-      </main>
-    </div>
+  // Footer Render
+  const renderFooter = () => e('footer', { className: 'text-center text-gray-600 pt-8' },
+    e('p', null, '数据实时同步于 Firestore 数据库。')
+  );
+
+  // App Top-level Render
+  return e('div', { className: 'min-h-screen bg-gray-900 p-8' },
+    renderHeader(),
+    e('main', { className: 'max-w-4xl mx-auto space-y-8' },
+      e(Store, null),
+      e(GamePanel, null)
+    ),
+    renderFooter()
   );
 };
 
-// 确保在页面加载后渲染 React 应用，并正确包裹 Provider
+// Ensure React application is rendered after the page loads
 window.onload = function() {
     const rootElement = document.getElementById('root');
-    // 使用新的 React 18 API
+    if (!rootElement) {
+        console.error("无法找到 #root 元素。");
+        return;
+    }
+    
+    // Use the new React 18 API to render the app wrapped in providers
     createRoot(rootElement).render(
-        <AuthProvider>
-            <CurrencyProvider>
-                <App />
-            </CurrencyProvider>
-        </AuthProvider>
+        e(AuthProvider, null, 
+            e(CurrencyProvider, null, 
+                e(App, null)
+            )
+        )
     );
 }
     </script>
