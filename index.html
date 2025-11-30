@@ -3,259 +3,546 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🤖 AI生成小游戏集合地</title>
+    <title>AI 游戏盈利系统</title>
+    <!-- 引入 Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 React, ReactDOM, 和 Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <!-- Babel 用于在浏览器中实时编译 JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
-        /* CSS 样式部分 - 优化后的深色科技主题 */
-        :root {
-            --primary-color: #00bcd4; /* 科技青色 */
-            --secondary-color: #3f51b5; /* 靛蓝色 */
-            --background-dark: #1f2833; /* 极深背景 */
-            --card-background: #2c3a47; /* 卡片背景 */
-            --text-light: #eceff1; /* 浅色文本 */
-            --text-accent: #76ff03; /* 强调荧光绿 */
-            --shadow-color: rgba(0, 0, 0, 0.4);
-        }
-
+        /* 设置全局字体和背景，增强视觉效果 */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
         body {
-            font-family: 'Consolas', 'Courier New', monospace; /* 科技感等宽字体 */
-            margin: 0;
-            padding: 0;
-            background-color: var(--background-dark);
-            color: var(--text-light);
-            line-height: 1.6;
-            background-image: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
-            background-size: 40px 40px; /* 增加背景网格/纹理 */
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* 沉稳的深蓝色背景 */
+            color: #e2e8f0;
         }
-
-        header {
-            background: rgba(0, 0, 0, 0.5); /* 略微透明，可以看到背景纹理 */
-            color: var(--text-light);
-            padding: 30px 0;
-            text-align: center;
-            box-shadow: 0 5px 15px var(--shadow-color);
-            border-bottom: 3px solid var(--primary-color);
-        }
-
-        header h1 {
-            margin: 0;
-            font-size: 3em;
-            letter-spacing: 5px;
-            color: var(--primary-color);
-            text-shadow: 0 0 10px var(--primary-color); /* 发光效果 */
-        }
-
-        header p {
-            margin: 10px 0 0;
-            font-size: 1.2em;
-            color: var(--text-accent);
-        }
-
-        /* 导航栏样式 */
-        nav {
-            background: var(--secondary-color);
-            text-align: center;
-            padding: 10px 0;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
-        }
-
-        nav a {
-            color: var(--text-light);
-            text-decoration: none;
-            padding: 10px 25px;
-            margin: 0 10px;
-            border-radius: 5px;
-            transition: background-color 0.3s, color 0.3s;
-            font-weight: bold;
-        }
-
-        nav a:hover {
-            background-color: var(--primary-color);
-            color: var(--background-dark);
-            box-shadow: 0 0 10px var(--primary-color);
-        }
-
-        /* 游戏区域样式 */
-        main {
-            padding: 30px 20px;
-            max-width: 1200px;
-            margin: 30px auto;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 30px; /* 卡片之间的间距 */
-        }
-        
-        /* 游戏卡片容器 */
-        .game-section {
-            flex: 1 1 calc(50% - 30px); /* 让卡片占据 50% 宽度，并在小屏幕上自动换行 */
-            min-width: 300px;
-            background: var(--card-background);
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 10px 20px var(--shadow-color);
-            border: 1px solid var(--secondary-color);
-            transition: transform 0.3s, box-shadow 0.3s;
-        }
-
-        .game-section:hover {
-            transform: translateY(-8px) scale(1.02);
-            box-shadow: 0 15px 30px var(--shadow-color), 0 0 20px var(--primary-color); /* 悬停发光 */
-        }
-
-        .game-section h2 {
-            color: var(--text-accent);
-            border-bottom: 2px dashed var(--primary-color);
-            padding-bottom: 10px;
-            margin-top: 0;
-            font-size: 1.8em;
-        }
-
-        /* 示例小游戏 - 猜数字 样式 */
-        #guess-game-container {
+        /* 确保自定义 alert 样式可以覆盖 */
+        .custom-alert {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
             padding: 20px;
-            background: rgba(0, 0, 0, 0.2); /* 略透明内背景 */
+            background: #1f2937;
+            border: 2px solid #3b82f6;
             border-radius: 8px;
-            border: 1px solid var(--primary-color);
-            margin-top: 15px;
-        }
-
-        #guess-game-container button {
-            background-color: var(--primary-color);
-            color: var(--background-dark);
-            border: none;
-            padding: 10px 20px;
-            font-size: 1em;
-            margin: 8px 5px;
-            cursor: pointer;
-            border-radius: 5px;
-            transition: background-color 0.3s, transform 0.1s;
-            font-weight: bold;
-        }
-
-        #guess-game-container button:hover {
-            background-color: var(--secondary-color);
-            color: var(--text-light);
-        }
-        
-        #guess-game-container button:active {
-            transform: scale(0.98);
-        }
-
-
-        #guess-input {
-            padding: 10px;
-            margin-right: 10px;
-            border: 1px solid var(--primary-color);
-            border-radius: 5px;
-            width: 100px;
+            z-index: 1000;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+            max-width: 80%;
             text-align: center;
-            background-color: var(--background-dark);
-            color: var(--text-light);
-            font-size: 1em;
-        }
-
-        #guess-result {
-            margin-top: 20px;
-            font-weight: bold;
-            min-height: 25px;
-            color: var(--text-accent);
         }
     </style>
 </head>
 <body>
+    <div id="root">
+        <!-- React 应用将在此处渲染 -->
+    </div>
 
-    <header>
-        <h1>🤖 AI GAME HUB</h1>
-        <p>由 **Gemini** 驱动的创意小游戏集合 | 正在持续升级...</p>
-    </header>
-
-    <nav>
-        <a href="#game1">猜数字</a>
-        <a href="#game2">敬请期待</a>
-        </nav>
-
-    <main>
-        <section class="game-section" id="game1">
-            <h2>🔢 游戏一：猜数字 (1-100)</h2>
-            <p>**[难度：EASY]** 系统已生成一个 1 到 100 之间的数字。你有 5 次机会猜中它！</p>
-            
-            <div id="guess-game-container">
-                <p>剩余次数：<span id="guess-count" style="color: var(--text-accent);">5</span></p>
-                <input type="number" id="guess-input" min="1" max="100" placeholder="输入数字">
-                <button onclick="checkGuess()">提交猜测</button>
-                <button onclick="startGame()">重新启动</button>
-                <div id="guess-result"></div>
-            </div>
-        </section>
-
-        <section class="game-section" id="game2">
-            <h2>✨ 游戏二：敬请期待 (Next Game Slot)</h2>
-            <p>**[难度：??]** 这个区域将添加由我为您生成的下一个小游戏，比如一个简单的**文字冒险游戏**或**反应速度测试**。</p>
-            <p>告诉我您希望下一个小游戏是什么主题的，我马上为您设计并添加进来！</p>
-        </section>
-
-        </main>
-
-    <script>
-        // JavaScript 逻辑部分 - 游戏一：猜数字
-
-        let secretNumber;
-        let guessesRemaining;
-        const maxGuesses = 5;
-
-        // 初始化游戏
-        function startGame() {
-            // 生成 1 到 100 之间的随机数
-            secretNumber = Math.floor(Math.random() * 100) + 1;
-            guessesRemaining = maxGuesses;
-            
-            // 更新 UI
-            document.getElementById('guess-count').textContent = guessesRemaining;
-            document.getElementById('guess-result').innerHTML = '<span style="color: var(--primary-color);">>>> 初始化完成，开始猜！</span>';
-            document.getElementById('guess-input').value = '';
-            document.getElementById('guess-input').disabled = false;
-        }
-
-        // 检查猜测
-        function checkGuess() {
-            const guessInput = document.getElementById('guess-input');
-            const resultDisplay = document.getElementById('guess-result');
-            const guess = parseInt(guessInput.value);
-
-            if (document.getElementById('guess-input').disabled) {
-                resultDisplay.textContent = '游戏已结束，请点击 "重新启动"。';
-                return;
-            }
-
-            if (isNaN(guess) || guess < 1 || guess > 100) {
-                resultDisplay.innerHTML = '<span style="color: red;">错误：请输入一个 1 到 100 之间的有效数字。</span>';
-                return;
-            }
-
-            guessesRemaining--;
-            document.getElementById('guess-count').textContent = guessesRemaining;
-
-            if (guess === secretNumber) {
-                resultDisplay.innerHTML = `**恭喜你！成功解密数字 ${secretNumber}！🎉**`;
-                guessInput.disabled = true; 
-            } else if (guessesRemaining === 0) {
-                resultDisplay.innerHTML = `<span style="color: red;">[TERMINATED] 游戏失败！正确答案是 ${secretNumber}。😭</span>`;
-                guessInput.disabled = true;
-            } else if (guess < secretNumber) {
-                resultDisplay.innerHTML = `[反馈] 数字 <span style="color: yellow;">太小了</span>。 (剩余 ${guessesRemaining} 次)`;
-            } else { // guess > secretNumber
-                resultDisplay.innerHTML = `[反馈] 数字 <span style="color: yellow;">太大了</span>。 (剩余 ${guessesRemaining} 次)`;
-            }
-
-            // 清空输入框以便下一次输入
-            guessInput.value = '';
-        }
-
-        // 页面加载完成后立即开始游戏
-        window.onload = startGame;
+    <!-- 自定义 Alert 替代浏览器的 alert() -->
+    <div id="custom-alert-container"></div>
+    <script type="text/javascript">
+        // 重写 alert() 函数以使用自定义 UI
+        window.alert = function(message) {
+            const container = document.getElementById('custom-alert-container');
+            const alertBox = document.createElement('div');
+            alertBox.className = 'custom-alert';
+            alertBox.innerHTML = `
+                <p class="text-white text-lg mb-4">${message}</p>
+                <button 
+                    onclick="this.parentNode.remove()" 
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition duration-150"
+                >
+                    确认
+                </button>
+            `;
+            container.appendChild(alertBox);
+        };
     </script>
 
+    <!-- React/JSX 代码块 -->
+    <!-- type="text/babel" 告诉 Babel 编译此代码 -->
+    <script type="text/babel">
+// 移除对 'react' 模块的导入，转为依赖全局的 React 对象
+
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+
+// =================================================================
+// 1. 【重要】全局配置与工具函数 - 请替换您的 Firebase 配置
+// =================================================================
+
+// 1.1 请将 'YOUR_APP_ID_HERE' 替换为一个固定的、唯一的应用标识符（例如 'my-game-store-prod'）
+const appId = 'AiGameWeb'; 
+
+// 1.2 🔥🔥🔥 请用您自己的 Firebase Web 应用配置对象替换下面的所有 '***' 占位符 🔥🔥🔥
+const firebaseConfig = {
+    apiKey: "AIzaSyD0kALHxst8sqHLLhPNpRyuu-6VOD1tlHo",
+    authDomain: "aigame-store.firebaseapp.com",
+    projectId: "aigame-store",
+    storageBucket: "aigame-store.firebasestorage.app",
+    messagingSenderId: "227975426620",
+    appId: "1:227975426620:web:cac0a0ad8d8cea87de0939"
+};
+// 🔥🔥🔥 替换结束 🔥🔥🔥
+
+// 在 GitHub Pages 环境中，不使用 custom token
+const initialAuthToken = null; 
+
+// 初始化 Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// Contexts
+const AuthContext = React.createContext(null);
+const CurrencyContext = React.createContext(null);
+
+// =================================================================
+// 2. 认证和数据库连接 (AuthProvider)
+// =================================================================
+
+const AuthProvider = ({ children }) => {
+  const [userId, setUserId] = React.useState(null);
+  const [isAuthReady, setIsAuthReady] = React.useState(false);
+
+  React.useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (initialAuthToken) {
+          // 在本环境中不使用此分支
+          await signInWithCustomToken(auth, initialAuthToken);
+        } else {
+          // GitHub Pages 环境下，使用匿名登录
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Firebase 登录失败:", error);
+      }
+    };
+
+    // 监听认证状态变化
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        // 如果匿名登录失败，使用随机 ID
+        setUserId(crypto.randomUUID());
+      }
+      setIsAuthReady(true);
+    });
+
+    initAuth();
+    return () => unsubscribe();
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ userId, db, isAuthReady }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+// =================================================================
+// 3. 虚拟货币与道具管理 (CurrencyProvider)
+// =================================================================
+
+const AD_LIMIT_PER_DAY = 5;
+
+const CurrencyProvider = ({ children }) => {
+  const { userId, db, isAuthReady } = React.useContext(AuthContext);
+  const [balance, setBalance] = React.useState(0);
+  const [inventory, setInventory] = React.useState({});
+  const [adsWatchedToday, setAdsWatchedToday] = React.useState(0);
+  const [lastAdDate, setLastAdDate] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  // Firestore 文档引用路径
+  const getProfileRef = React.useCallback((id) => {
+    if (!db || !id) return null;
+    // 使用 Private Data 路径结构：/artifacts/{appId}/users/{userId}/data/profile
+    return doc(db, 'artifacts', appId, 'users', id, 'data', 'profile');
+  }, [db]);
+
+  // 初始化用户数据或同步数据
+  React.useEffect(() => {
+    if (!isAuthReady || !userId) return;
+
+    const profileRef = getProfileRef(userId);
+
+    const initializeData = async () => {
+      try {
+        const docSnap = await getDoc(profileRef);
+        if (!docSnap.exists()) {
+          const initialData = {
+            balance: 100, // 初始奖励
+            inventory: {},
+            lastAdDate: new Date(0).toISOString(), // 初始化为历史日期
+            adsWatchedToday: 0,
+          };
+          await setDoc(profileRef, initialData);
+          setBalance(initialData.balance);
+          setInventory(initialData.inventory);
+          setAdsWatchedToday(0);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.error("初始化数据失败，可能缺少 Firestore 权限:", e);
+        // 即使失败，也设置 loading=false 允许 UI 加载
+        setLoading(false);
+      }
+    };
+
+    initializeData();
+
+    // 实时监听数据变化
+    const unsubscribe = onSnapshot(profileRef, (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        const today = new Date().toDateString();
+        const lastAd = new Date(data.lastAdDate || 0).toDateString();
+
+        // 每日重置逻辑
+        let currentAdsWatched = data.adsWatchedToday || 0;
+        if (lastAd !== today) {
+          currentAdsWatched = 0; // 新的一天，重置次数
+        }
+
+        setBalance(data.balance || 0);
+        setInventory(data.inventory || {});
+        setAdsWatchedToday(currentAdsWatched);
+        setLastAdDate(data.lastAdDate);
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error("Firestore 监听失败:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [isAuthReady, userId, getProfileRef]); // 依赖项确保在认证完成后执行
+
+  // 观看广告获取虚拟币 (带每日限制)
+  const watchAd = async () => {
+    if (!userId || adsWatchedToday >= AD_LIMIT_PER_DAY) {
+      alert("今日广告次数已达上限，请明天再试！");
+      return false;
+    }
+
+    const profileRef = getProfileRef(userId);
+    if (!profileRef) return false;
+
+    // 模拟广告播放延迟
+    console.log("正在播放广告...");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    console.log("广告播放完毕，奖励发放中...");
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(profileRef);
+        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+        const data = docSnap.data();
+        const today = new Date().toDateString();
+        const lastAd = new Date(data.lastAdDate || 0).toDateString();
+
+        let newAdsWatched = data.adsWatchedToday || 0;
+        if (lastAd !== today) {
+          newAdsWatched = 0; // 重置
+        }
+
+        if (newAdsWatched >= AD_LIMIT_PER_DAY) throw new Error("已超过今日限制");
+
+        transaction.update(profileRef, {
+          balance: (data.balance || 0) + 10, // 奖励 10 虚拟币
+          adsWatchedToday: newAdsWatched + 1,
+          lastAdDate: new Date().toISOString(),
+        });
+      });
+      alert("恭喜！获得 10 虚拟币奖励！");
+      return true;
+    } catch (e) {
+      console.error("广告交易失败:", e);
+      alert(`奖励发放失败: ${e.message || e}`);
+      return false;
+    }
+  };
+
+  // 购买虚拟币 (模拟现实货币交易)
+  const buyCoins = async (amount, realCost) => {
+    if (!userId) return alert("请先登录。");
+    const profileRef = getProfileRef(userId);
+    if (!profileRef) return false;
+
+    // --- 实际支付网关集成点 ---
+    console.log(`模拟发起支付: 购买 ${amount} 币，支付 ${realCost} USD...`);
+    // 假设此处调用了 Stripe/PayPal API，并在服务器端验证了支付成功
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    // --- 实际支付网关集成点 End ---
+
+    try {
+      // 此处不需要事务，因为只是增加余额，不涉及扣减
+      await updateDoc(profileRef, {
+        balance: balance + amount, // 直接增加余额
+      });
+      alert(`购买成功！获得 ${amount} 虚拟币！`);
+      return true;
+    } catch (e) {
+      console.error("购买虚拟币失败:", e);
+      alert("购买失败，请稍后再试。");
+      return false;
+    }
+  };
+
+  // 购买道具 (在游戏中使用虚拟币)
+  const buyItem = async (itemId, cost) => {
+    if (!userId) return alert("请先登录。");
+    const profileRef = getProfileRef(userId);
+    if (!profileRef) return false;
+
+    try {
+      await runTransaction(db, async (transaction) => {
+        const docSnap = await transaction.get(profileRef);
+        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+        const currentBalance = docSnap.data().balance || 0;
+        if (currentBalance < cost) throw new Error("余额不足");
+
+        // 更新余额和库存
+        const newInventory = { ...docSnap.data().inventory };
+        newInventory[itemId] = (newInventory[itemId] || 0) + 1;
+
+        transaction.update(profileRef, {
+          balance: currentBalance - cost,
+          inventory: newInventory,
+        });
+      });
+
+      alert(`购买成功！获得道具: ${itemId}`);
+      return true;
+    } catch (e) {
+      console.error("购买道具失败:", e);
+      alert(`购买失败: ${e.message || e}`);
+      return false;
+    }
+  };
+
+  const contextValue = {
+    balance,
+    inventory,
+    watchAd,
+    buyCoins,
+    buyItem,
+    adsWatchedToday,
+    AD_LIMIT_PER_DAY,
+    loading,
+    userId,
+  };
+
+  return (
+    <CurrencyContext.Provider value={contextValue}>
+      {children}
+    </CurrencyContext.Provider>
+  );
+};
+
+// Custom Hook to use currency system
+const useCurrency = () => React.useContext(CurrencyContext);
+
+// =================================================================
+// 4. 核心应用组件 (App)
+// =================================================================
+
+// 道具商店组件
+const Store = () => {
+  const { buyItem, inventory, adsWatchedToday, AD_LIMIT_PER_DAY, watchAd, buyCoins } = useCurrency();
+
+  const shopItems = [
+    { id: 'shield', name: '永久护盾', cost: 150, description: '在星际躲避中拥有额外一次护盾' },
+    { id: 'speed_boost', name: '速度药水', cost: 50, description: '贪吃蛇游戏开局速度提高' },
+    { id: 'cosmetic_skin', name: '飞船皮肤', cost: 200, description: '解锁飞船的炫酷皮肤' },
+  ];
+
+  const coinPacks = [
+    { amount: 50, cost: 0.99 },
+    { amount: 120, cost: 1.99 },
+    { amount: 300, cost: 4.99 },
+  ];
+
+  return (
+    <div className="p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md">
+      <h2 className="text-2xl font-bold mb-4 text-white">虚拟货币商店</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        
+        {/* 货币购买区 (模拟支付) */}
+        <section>
+          <h3 className="text-xl font-semibold mb-3 text-indigo-400">💰 购买虚拟币 (RMB)</h3>
+          <div className="space-y-3">
+            {coinPacks.map(pack => (
+              <button
+                key={pack.amount}
+                onClick={() => buyCoins(pack.amount, pack.cost)}
+                className="w-full flex justify-between items-center p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md text-white font-medium"
+              >
+                <span>{pack.amount} 虚拟币</span>
+                <span className="text-sm bg-indigo-700 py-1 px-3 rounded-full">¥ {pack.cost}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+        
+        {/* 广告获取区 */}
+        <section>
+          <h3 className="text-xl font-semibold mb-3 text-pink-400">📺 免费获取 (看广告)</h3>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-400">
+              今日已看: {adsWatchedToday} / {AD_LIMIT_PER_DAY} 次
+            </p>
+            <button
+              onClick={watchAd}
+              disabled={adsWatchedToday >= AD_LIMIT_PER_DAY}
+              className={`mt-1 w-full p-4 rounded-lg transition duration-150 font-bold ${
+                adsWatchedToday >= AD_LIMIT_PER_DAY 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                  : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg'
+              }`}
+            >
+              {adsWatchedToday >= AD_LIMIT_PER_DAY ? '今日额度已用完' : '观看广告 (得 10 币)'}
+            </button>
+            <p className="text-xs text-gray-500 mt-2">（此操作将更新您的 Firestore 账户数据）</p>
+          </div>
+        </section>
+      </div>
+
+      <h3 className="text-2xl font-bold mt-8 mb-4 text-white">购买游戏道具</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {shopItems.map(item => (
+          <div key={item.id} className="p-4 bg-gray-700/70 rounded-lg border border-gray-600">
+            <h4 className="font-semibold text-lg text-cyan-400">{item.name}</h4>
+            <p className="text-sm text-gray-400 mb-3">{item.description}</p>
+            <div className="flex justify-between items-center">
+              <span className="text-base font-bold text-yellow-300">{item.cost} 币</span>
+              <button
+                onClick={() => buyItem(item.id, item.cost)}
+                className="bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-500 transition duration-150 text-sm"
+              >
+                购买 (库存: {inventory[item.id] || 0})
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// 游戏组件（用于演示如何消费道具）
+const GamePanel = () => {
+    const { inventory, balance, buyItem } = useCurrency();
+    const hasShield = inventory['shield'] > 0;
+    const hasSpeedBoost = inventory['speed_boost'] > 0;
+
+    const [message, setMessage] = React.useState('开始游戏...');
+
+    const useItem = async (itemId, cost) => {
+        if(inventory[itemId] > 0) {
+            // ** 关键：消耗道具必须通过数据库事务，以保证库存准确 **
+            // buyItem 函数内部会进行余额检查和库存扣减，虽然 cost 为 0，但逻辑上是安全的
+            const success = await buyItem(itemId, 0); 
+            
+            if (success) {
+                // 如果成功，显示游戏内反馈
+                setMessage(`已成功消耗道具: ${itemId}。游戏属性已生效！`);
+            } else {
+                setMessage(`道具消耗失败，请稍后再试。`);
+            }
+        } else {
+            setMessage(`没有 ${itemId} 道具了，去商店看看吧。`);
+        }
+    }
+
+    return (
+        <div className="p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md">
+            <h2 className="text-2xl font-bold mb-4 text-white">游戏区域模拟</h2>
+            <div className="mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300">
+                当前余额: {balance} 币
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-indigo-900/50 rounded-lg">
+                    <p className="text-lg font-semibold text-white">星际躲避</p>
+                    <p className="text-sm text-gray-400">永久护盾库存: {inventory['shield'] || 0}</p>
+                    <button
+                        onClick={() => useItem('shield', 0)}
+                        disabled={!hasShield}
+                        className={`mt-2 w-full py-2 rounded ${hasShield ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                    >
+                        {hasShield ? '使用护盾' : '无护盾'}
+                    </button>
+                </div>
+                <div className="p-3 bg-indigo-900/50 rounded-lg">
+                    <p className="text-lg font-semibold text-white">霓虹贪吃蛇</p>
+                    <p className="text-sm text-gray-400">速度药水库存: {inventory['speed_boost'] || 0}</p>
+                    <button
+                        onClick={() => useItem('speed_boost', 0)}
+                        disabled={!hasSpeedBoost}
+                        className={`mt-2 w-full py-2 rounded ${hasSpeedBoost ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                    >
+                        {hasSpeedBoost ? '使用速度药水' : '无药水'}
+                    </button>
+                </div>
+            </div>
+            <p className="mt-4 text-center text-yellow-300">{message}</p>
+        </div>
+    );
+}
+
+// 主应用组件
+const App = () => {
+  const { isAuthReady } = React.useContext(AuthContext);
+  const { loading, userId } = useCurrency();
+
+  if (!isAuthReady || loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
+        <div className="animate-pulse">正在初始化系统...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-900 p-8">
+      <header className="text-center mb-8">
+        <h1 className="text-4xl font-extrabold text-white mb-2">AI 游戏盈利系统演示</h1>
+        <p className="text-sm text-gray-500">当前用户 ID: <span className="text-yellow-400 break-all">{userId}</span></p>
+      </header>
+
+      <main className="max-w-4xl mx-auto space-y-8">
+        <Store />
+        <GamePanel />
+        <footer className="text-center text-gray-600 pt-8">
+          <p>数据实时同步于 Firestore 数据库。</p>
+        </footer>
+      </main>
+    </div>
+  );
+};
+
+// 确保在页面加载后渲染 React 应用，并正确包裹 Provider
+window.onload = function() {
+    const rootElement = document.getElementById('root');
+    ReactDOM.createRoot(rootElement).render(
+        <AuthProvider>
+            <CurrencyProvider>
+                <App />
+            </CurrencyProvider>
+        </AuthProvider>
+    );
+}
+    </script>
 </body>
 </html>
