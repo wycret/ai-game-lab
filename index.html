@@ -35,6 +35,30 @@
             max-width: 80%;
             text-align: center;
         }
+        /* 贪吃蛇游戏区域的特殊样式 */
+        .snake-board {
+            width: 100%;
+            max-width: 400px;
+            aspect-ratio: 1 / 1; /* 保持正方形 */
+            margin: 0 auto;
+            background-color: #1e293b;
+            border: 2px solid #475569;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3); /* 霓虹效果 */
+            display: grid;
+            grid-template-columns: repeat(20, 1fr); /* 20x20 网格 */
+        }
+
+        .snake-segment {
+            background-color: #38bdf8; /* 蛇身颜色 */
+            border-radius: 2px;
+            box-shadow: 0 0 5px #0ea5e9;
+        }
+
+        .food-item {
+            background-color: #f87171; /* 食物颜色 */
+            border-radius: 50%;
+            box-shadow: 0 0 8px #ef4444;
+        }
     </style>
 </head>
 <body>
@@ -70,7 +94,7 @@
         import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
         // Use React global variables (e is short for React.createElement)
-        const { createElement: e, useState, useEffect, useContext, createContext, useCallback } = window.React;
+        const { createElement: e, useState, useEffect, useContext, createContext, useCallback, useRef } = window.React;
         const { createRoot } = window.ReactDOM;
 
         // =================================================================
@@ -127,6 +151,7 @@
         // Contexts
         const AuthContext = createContext(null);
         const CurrencyContext = createContext(null);
+        const GameContext = createContext(null); // New Game Context
 
         // =================================================================
         // 2. AUTHENTICATION PROVIDER (AuthProvider)
@@ -404,10 +429,288 @@
         const useCurrency = () => useContext(CurrencyContext);
 
         // =================================================================
-        // 4. REACT COMPONENTS (Pure JS with createElement)
+        // 4. GAME STRUCTURE AND REGISTRY
         // =================================================================
 
-        // Item Shop Component (Store)
+        // 4.1 Neon Snake Game Component
+        const NeonSnakeGame = ({ useItem }) => {
+            const { inventory } = useCurrency();
+            const isBoosted = inventory['speed_boost'] > 0;
+
+            // Game Constants
+            const BOARD_SIZE = 20;
+            const INITIAL_SPEED = 100; // milliseconds per move
+            const SPEED_BOOST_BONUS = 50; // faster if used speed boost
+
+            // Game State
+            const [snake, setSnake] = useState([{ x: 10, y: 10 }]);
+            const [food, setFood] = useState({ x: 5, y: 5 });
+            const [direction, setDirection] = useState({ x: 1, y: 0 });
+            const [running, setRunning] = useState(false);
+            const [score, setScore] = useState(0);
+            const [gameOver, setGameOver] = useState(false);
+            const [isItemActive, setIsItemActive] = useState(false);
+
+            const gameSpeed = INITIAL_SPEED - (isItemActive ? SPEED_BOOST_BONUS : 0);
+            const intervalRef = useRef(null);
+
+            // Simple 2D Vector equality check
+            const checkCollision = (p1, p2) => p1.x === p2.x && p1.y === p2.y;
+
+            const generateFood = useCallback((currentSnake) => {
+                let newFood;
+                do {
+                    newFood = {
+                        x: Math.floor(Math.random() * BOARD_SIZE),
+                        y: Math.floor(Math.random() * BOARD_SIZE)
+                    };
+                } while (currentSnake.some(segment => checkCollision(segment, newFood)));
+                return newFood;
+            }, []);
+
+            const moveSnake = useCallback(() => {
+                if (!running || gameOver) return;
+
+                setSnake(prevSnake => {
+                    const head = prevSnake[0];
+                    const newHead = { x: head.x + direction.x, y: head.y + direction.y };
+
+                    // Check boundaries & self-collision
+                    if (newHead.x < 0 || newHead.x >= BOARD_SIZE || newHead.y < 0 || newHead.y >= BOARD_SIZE ||
+                        prevSnake.slice(1).some(segment => checkCollision(segment, newHead))) {
+                        setGameOver(true);
+                        return prevSnake;
+                    }
+
+                    // Check food collision
+                    if (checkCollision(newHead, food)) {
+                        setScore(s => s + 10);
+                        setFood(generateFood([...prevSnake, newHead]));
+                        return [newHead, ...prevSnake];
+                    } else {
+                        return [newHead, ...prevSnake.slice(0, -1)];
+                    }
+                });
+            }, [running, gameOver, direction, food, generateFood]);
+
+            // Set up game interval
+            useEffect(() => {
+                if (running && !gameOver) {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                    intervalRef.current = setInterval(moveSnake, gameSpeed);
+                } else if (intervalRef.current) {
+                    clearInterval(intervalRef.current);
+                }
+                return () => {
+                    if (intervalRef.current) clearInterval(intervalRef.current);
+                };
+            }, [running, gameOver, moveSnake, gameSpeed]);
+
+            // Handle keyboard input
+            useEffect(() => {
+                const handleKeyDown = (e) => {
+                    if (!running || gameOver) return;
+                    switch (e.key) {
+                        case 'ArrowUp':
+                            if (direction.y === 0) setDirection({ x: 0, y: -1 });
+                            break;
+                        case 'ArrowDown':
+                            if (direction.y === 0) setDirection({ x: 0, y: 1 });
+                            break;
+                        case 'ArrowLeft':
+                            if (direction.x === 0) setDirection({ x: -1, y: 0 });
+                            break;
+                        case 'ArrowRight':
+                            if (direction.x === 0) setDirection({ x: 1, y: 0 });
+                            break;
+                    }
+                };
+                window.addEventListener('keydown', handleKeyDown);
+                return () => window.removeEventListener('keydown', handleKeyDown);
+            }, [running, gameOver, direction]);
+
+            // Reset game state
+            const startGame = (useSpeedItem = false) => {
+                setSnake([{ x: 10, y: 10 }]);
+                setFood(generateFood([{ x: 10, y: 10 }]));
+                setDirection({ x: 1, y: 0 });
+                setScore(0);
+                setGameOver(false);
+                setRunning(true);
+                setIsItemActive(useSpeedItem);
+            };
+
+            // Function to handle item usage from external button
+            const handleUseSpeedBoost = async () => {
+                if (!isBoosted) {
+                    alert("请先从商店购买速度药水！");
+                    return;
+                }
+                const success = await useItem('speed_boost');
+                if (success) {
+                    startGame(true);
+                    alert("速度药水已消耗！游戏将以加速模式开始。");
+                }
+            };
+
+            const handleStartNormal = () => {
+                startGame(false);
+            }
+
+            // Render the game board cells
+            const renderBoard = () => {
+                const cells = [];
+                const isSnake = (x, y) => snake.some(segment => checkCollision(segment, { x, y }));
+                const isFood = (x, y) => checkCollision({ x, y }, food);
+
+                for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+                    const x = i % BOARD_SIZE;
+                    const y = Math.floor(i / BOARD_SIZE);
+                    let className = '';
+
+                    if (isSnake(x, y)) {
+                        className = 'snake-segment';
+                    } else if (isFood(x, y)) {
+                        className = 'food-item';
+                    }
+
+                    cells.push(e('div', { key: i, className: className }));
+                }
+                return cells;
+            };
+
+            const renderControls = () => {
+                if (running && !gameOver) {
+                    return e('p', { className: 'text-xl text-cyan-400 font-bold' }, `得分: ${score} - 速度: ${gameSpeed}ms`);
+                } else if (gameOver) {
+                    return e('div', { className: 'flex flex-col items-center space-y-3' },
+                        e('p', { className: 'text-3xl text-red-500 font-extrabold' }, `游戏结束！最终得分: ${score}`),
+                        e('button', {
+                            onClick: handleStartNormal,
+                            className: 'bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-full transition duration-150 shadow-xl'
+                        }, '重新开始 (普通模式)')
+                    );
+                } else {
+                    // Initial state
+                    return e('div', { className: 'flex flex-col sm:flex-row gap-4 justify-center' },
+                        e('button', {
+                            onClick: handleStartNormal,
+                            className: 'bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-6 rounded-full transition duration-150 shadow-xl'
+                        }, '开始游戏 (普通模式)'),
+                        e('button', {
+                            onClick: handleUseSpeedBoost,
+                            disabled: !isBoosted,
+                            className: `font-bold py-3 px-6 rounded-full transition duration-150 shadow-xl ${isBoosted
+                                    ? 'bg-purple-600 hover:bg-purple-500 text-white'
+                                    : 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                }`
+                        }, isBoosted ? '使用速度药水开始' : '购买药水以加速')
+                    );
+                }
+            }
+
+            // Main render function for the game
+            return e('div', { className: 'p-6 bg-gray-900 rounded-xl shadow-inner border border-gray-700/50' },
+                e('h3', { className: 'text-2xl font-bold mb-4 text-center text-white' }, '🎮 霓虹贪吃蛇游戏'),
+                e('p', { className: 'text-center text-sm mb-4 text-gray-400' }, `使用键盘方向键控制蛇移动。${isItemActive ? '🚀加速模式激活！' : ''}`),
+                e('div', { className: 'snake-board' }, renderBoard()),
+                e('div', { className: 'mt-6 text-center' }, renderControls())
+            );
+        };
+
+        // 4.2 Game Registry (The heart of extensibility)
+        const GAME_REGISTRY = {
+            'lobby': {
+                id: 'lobby',
+                name: '游戏大厅',
+                description: '选择您想玩的游戏',
+                component: null // Special case for lobby
+            },
+            'snake': {
+                id: 'snake',
+                name: '霓虹贪吃蛇',
+                description: '经典贪吃蛇，支持速度药水道具。',
+                component: NeonSnakeGame,
+                // Game-specific items can be linked here for easy access
+                requiredItem: 'speed_boost'
+            },
+            // Future games can be added here:
+            // 'shooter': {
+            //     id: 'shooter',
+            //     name: '星际躲避者',
+            //     description: '躲避太空碎片，支持永久护盾。',
+            //     component: ShooterGame,
+            //     requiredItem: 'shield'
+            // }
+        };
+
+        // 4.3 Game Router Component
+        const GameRouter = ({ activeGameId, setActiveGameId }) => {
+            const { useItem } = useCurrency();
+
+            // Fallback to lobby if ID is invalid
+            const gameId = GAME_REGISTRY[activeGameId] ? activeGameId : 'lobby';
+            const GameInfo = GAME_REGISTRY[gameId];
+
+            if (gameId === 'lobby') {
+                return e(GameLobby, { setActiveGameId });
+            }
+
+            // Render the selected Game component, passing necessary props
+            return e(GameInfo.component, {
+                // All games receive useItem function and a way to return to lobby
+                useItem: useItem,
+                goToLobby: () => setActiveGameId('lobby'),
+            });
+        };
+
+
+        // 4.4 Game Lobby Component (Replaces the old GamePanel)
+        const GameLobby = ({ setActiveGameId }) => {
+            const { balance, inventory } = useCurrency();
+
+            const games = Object.values(GAME_REGISTRY).filter(g => g.id !== 'lobby');
+
+            // Item Status Info (for the old placeholder items)
+            const hasShield = inventory['shield'] > 0;
+            const hasSkin = inventory['cosmetic_skin'] > 0;
+
+            // Lobby Top-level Render
+            return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md space-y-6' },
+                e('h2', { className: 'text-3xl font-bold mb-4 text-white text-center' }, '游戏大厅 (Game Lobby)'),
+                e('div', { className: 'p-4 bg-gray-700 rounded-lg text-xl font-mono text-green-300 text-center' }, `当前余额: ${balance} 币`),
+
+                // --- 游戏列表 ---
+                e('h3', { className: 'text-2xl font-semibold mt-6 mb-4 text-cyan-400' }, '选择一个游戏'),
+                e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
+                    games.map(game => e('div', { key: game.id, className: 'p-4 bg-gray-700/70 rounded-xl border border-gray-600 hover:bg-gray-600 transition cursor-pointer' },
+                        e('h4', { className: 'font-semibold text-xl text-white' }, game.name),
+                        e('p', { className: 'text-sm text-gray-400 mb-3' }, game.description),
+                        e('button', {
+                            onClick: () => setActiveGameId(game.id),
+                            className: 'mt-2 w-full py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition'
+                        }, '进入游戏')
+                    )),
+                ),
+
+                // --- 道具状态展示 (作为非游戏内道具的演示) ---
+                e('h3', { className: 'text-2xl font-semibold mt-8 mb-4 text-yellow-400' }, '持久道具状态'),
+                e('div', { className: 'grid grid-cols-2 gap-4 text-center' },
+                    e('div', { className: 'p-4 bg-gray-700/50 rounded-lg border border-gray-600' },
+                        e('p', { className: 'text-lg font-semibold' }, '永久护盾状态'),
+                        e('p', { className: 'text-xl font-bold mt-2' }, hasShield ? '🟢 已拥有' : '⚪ 未拥有'),
+                        e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventory['shield'] || 0}`)
+                    ),
+                    e('div', { className: 'p-4 bg-gray-700/50 rounded-lg border border-gray-600' },
+                        e('p', { className: 'text-lg font-semibold' }, '飞船皮肤状态'),
+                        e('p', { className: 'text-xl font-bold mt-2' }, hasSkin ? '🌟 已拥有' : '⚪ 未拥有'),
+                        e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventory['cosmetic_skin'] || 0}`)
+                    )
+                )
+            );
+        }
+
+        // 4.5 Store Component (Remains largely the same)
         const Store = () => {
             const { buyItem, inventory, adsWatchedToday, AD_LIMIT_PER_DAY, watchAd, buyCoins } = useCurrency();
 
@@ -483,54 +786,13 @@
         };
 
 
-        // Game Panel Component (GamePanel)
-        const GamePanel = () => {
-            const { inventory, balance, useItem } = useCurrency();
-            const hasShield = inventory['shield'] > 0;
-            const hasSpeedBoost = inventory['speed_boost'] > 0;
-
-            const [message, setMessage] = useState('开始游戏...');
-
-            const handleUseItem = async (itemId) => {
-                if (inventory[itemId] > 0) {
-                    const success = await useItem(itemId);
-
-                    if (success) {
-                        setMessage(`已成功消耗道具: ${itemId}。游戏属性已生效！`);
-                    } else {
-                        setMessage(`道具消耗失败，请稍后再试。`);
-                    }
-                } else {
-                    setMessage(`没有 ${itemId} 道具了，去商店看看吧。`);
-                }
-            }
-
-            const renderGameButton = (itemId, name, inventoryCount, hasItem) => e('div', { className: 'p-3 bg-indigo-900/50 rounded-lg' },
-                e('p', { className: 'text-lg font-semibold text-white' }, name),
-                e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventoryCount || 0}`),
-                e('button', {
-                    onClick: () => handleUseItem(itemId),
-                    disabled: !hasItem,
-                    className: `mt-2 w-full py-2 rounded ${hasItem ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`
-                }, hasItem ? '使用' + name.split('(')[0].trim() : `无${name.split('(')[0].trim()}`)
-            );
-
-            // GamePanel Top-level Render
-            return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
-                e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '游戏区域模拟'),
-                e('div', { className: 'mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300' }, `当前余额: ${balance} 币`),
-                e('div', { className: 'grid grid-cols-2 gap-4' },
-                    renderGameButton('shield', '星际躲避护盾', inventory['shield'], hasShield),
-                    renderGameButton('speed_boost', '霓虹贪吃蛇药水', inventory['speed_boost'], hasSpeedBoost)
-                ),
-                e('p', { className: 'mt-4 text-center text-yellow-300' }, message)
-            );
-        }
-
-        // Main Application Component (App)
+        // 4.6 Main Application Component (App)
         const App = () => {
             const { isAuthReady } = useContext(AuthContext);
             const { loading, userId } = useCurrency();
+
+            // State to manage which game component to display (The Router State)
+            const [activeGameId, setActiveGameId] = useState('lobby');
 
             if (!isAuthReady || loading) {
                 return e('div', { className: 'min-h-screen flex items-center justify-center bg-gray-900 text-white' },
@@ -543,7 +805,11 @@
                 e('h1', { className: 'text-4xl font-extrabold text-white mb-2' }, 'AI 游戏盈利系统演示'),
                 e('p', { className: 'text-sm text-gray-500' },
                     '当前用户 ID: ',
-                    e('span', { className: 'text-yellow-400 break-all' }, userId)
+                    e('span', { className: 'text-yellow-400 break-all' }, userId),
+                    e('button', {
+                        onClick: () => setActiveGameId('lobby'),
+                        className: 'ml-4 text-sm text-indigo-400 hover:text-indigo-300 transition'
+                    }, '(返回大厅)')
                 )
             );
 
@@ -557,7 +823,8 @@
                 renderHeader(),
                 e('main', { className: 'max-w-4xl mx-auto space-y-8' },
                     e(Store, null),
-                    e(GamePanel, null)
+                    // Game Router renders the selected game or the lobby
+                    e(GameRouter, { activeGameId, setActiveGameId })
                 ),
                 renderFooter()
             );
