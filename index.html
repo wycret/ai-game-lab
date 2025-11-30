@@ -6,7 +6,7 @@
     <title>AI 游戏盈利系统</title>
     <!-- 引入 Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- 引入 React 和 ReactDOM UMD 版本，确保全局变量可用 -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
@@ -14,6 +14,7 @@
     <style>
         /* 设置全局字体和背景，增强视觉效果 */
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
         body {
             font-family: 'Inter', sans-serif;
             background-color: #0f172a; /* 沉稳的深蓝色背景 */
@@ -45,512 +46,540 @@
     <div id="custom-alert-container"></div>
     <script type="text/javascript">
         // Overrides the native alert() function to use a custom UI
-        window.alert = function(message) {
+        window.alert = function (message) {
             const container = document.getElementById('custom-alert-container');
             const alertBox = document.createElement('div');
             alertBox.className = 'custom-alert';
             alertBox.innerHTML = `
-                <p class="text-white text-lg mb-4">${message}</p>
-                <button 
-                    onclick="this.parentNode.remove()" 
-                    class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition duration-150"
-                >
-                    确认
-                </button>
-            `;
+                    <p class="text-white text-lg mb-4">${message}</p>
+                    <button
+                        onclick="this.parentNode.remove()"
+                        class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 px-4 rounded transition duration-150"
+                    >
+                        确认
+                    </button>
+                `;
             container.appendChild(alertBox);
         };
     </script>
 
     <!-- React code block - Pure JavaScript + createElement to avoid SyntaxError -->
     <script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
+        import { getFirestore, doc, setDoc, onSnapshot, runTransaction } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js';
 
-// Use React global variables (e is short for React.createElement)
-const { createElement: e, useState, useEffect, useContext, createContext, useCallback } = window.React;
-const { createRoot } = window.ReactDOM;
+        // Use React global variables (e is short for React.createElement)
+        const { createElement: e, useState, useEffect, useContext, createContext, useCallback } = window.React;
+        const { createRoot } = window.ReactDOM;
 
-// =================================================================
-// 1. CONFIGURATION AND INITIALIZATION
-// =================================================================
+        // =================================================================
+        // 1. CONFIGURATION AND INITIALIZATION
+        // =================================================================
 
-// 1.1 App ID (Mandatory for Firestore path isolation)
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-ai-game-app'; 
+        // 1.1 App ID (Mandatory for Firestore path isolation)
+        const appId = 'AiGameWeb';
 
-// 1.2 Firebase Configuration (Injected via global variables)
-let firebaseConfig = null;
-try {
-    firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-} catch (error) {
-    console.error("Failed to parse Firebase configuration:", error);
-    firebaseConfig = {}; // Use empty object as fallback
-}
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null; 
-
-// Initialize Firebase services
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
-const auth = getAuth(app);
-
-// Contexts
-const AuthContext = createContext(null);
-const CurrencyContext = createContext(null);
-
-// =================================================================
-// 2. AUTHENTICATION PROVIDER (AuthProvider)
-// =================================================================
-
-const AuthProvider = ({ children }) => {
-  const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (initialAuthToken) {
-          // Sign in using the provided custom token
-          await signInWithCustomToken(auth, initialAuthToken);
-        } else {
-          // Fallback to anonymous sign-in for public access
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Firebase sign-in failed:", error);
-      }
-    };
-
-    // Listen for auth state changes to get the final UID
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setUserId(user.uid);
-      } else {
-        // If sign-in fails, use a random ID as fallback
-        setUserId(crypto.randomUUID());
-      }
-      setIsAuthReady(true);
-    });
-
-    initAuth();
-    return () => unsubscribe();
-  }, []);
-
-  // Use createElement instead of JSX
-  return e(
-    AuthContext.Provider, 
-    { value: { userId, db, isAuthReady } }, 
-    children
-  );
-};
-
-// =================================================================
-// 3. CURRENCY AND INVENTORY MANAGEMENT (CurrencyProvider)
-// =================================================================
-
-const AD_LIMIT_PER_DAY = 5;
-const COIN_PER_AD = 10;
-const INITIAL_BALANCE = 100;
-
-const CurrencyProvider = ({ children }) => {
-  const { userId, db, isAuthReady } = useContext(AuthContext);
-  const [balance, setBalance] = useState(0);
-  const [inventory, setInventory] = useState({});
-  const [adsWatchedToday, setAdsWatchedToday] = useState(0);
-  const [loading, setLoading] = useState(true);
-
-  // Firestore Document Reference Path function
-  const getProfileRef = useCallback((id) => {
-    if (!db || !id) return null;
-    // Private Data Path: /artifacts/{appId}/users/{userId}/data/profile
-    return doc(db, 'artifacts', appId, 'users', id, 'data', 'profile');
-  }, [db]);
-
-  // Real-time data synchronization and initialization
-  useEffect(() => {
-    if (!isAuthReady || !userId) return;
-
-    const profileRef = getProfileRef(userId);
-    if (!profileRef) return; 
-
-    // Real-time listener
-    const unsubscribe = onSnapshot(profileRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        const today = new Date().toDateString();
-        const lastAd = new Date(data.lastAdDate || 0).toDateString();
-
-        // Daily ad reset logic
-        let currentAdsWatched = data.adsWatchedToday || 0;
-        if (lastAd !== today) {
-          currentAdsWatched = 0; // Reset count for a new day
-        }
-
-        setBalance(data.balance || 0);
-        setInventory(data.inventory || {});
-        setAdsWatchedToday(currentAdsWatched);
-      } else {
-         // Initialize data if document doesn't exist
-         setBalance(INITIAL_BALANCE);
-         setInventory({});
-         setAdsWatchedToday(0);
-         
-         // Create the initial document
-         setDoc(profileRef, {
-            balance: INITIAL_BALANCE,
-            inventory: {},
-            lastAdDate: new Date(0).toISOString(),
-            adsWatchedToday: 0,
-         }, { merge: true }).catch(err => console.error("Failed to create initial data:", err));
-      }
-      setLoading(false);
-    }, (error) => {
-      console.error("Firestore listener failed:", error);
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [isAuthReady, userId, getProfileRef]); 
-
-  // Function to watch ad and get coins (with daily limit)
-  const watchAd = async () => {
-    if (!userId || adsWatchedToday >= AD_LIMIT_PER_DAY) {
-      alert("今日广告次数已达上限，请明天再试！");
-      return false;
-    }
-
-    const profileRef = getProfileRef(userId);
-    if (!profileRef) return false;
-
-    console.log("Simulating ad playback...");
-    await new Promise(resolve => setTimeout(resolve, 1500)); 
-
-    try {
-      await runTransaction(db, async (transaction) => {
-        const docSnap = await transaction.get(profileRef);
-        if (!docSnap.exists()) throw new Error("用户数据不存在");
-
-        const data = docSnap.data();
-        const today = new Date().toDateString();
-        const lastAd = new Date(data.lastAdDate || 0).toDateString();
-
-        let newAdsWatched = data.adsWatchedToday || 0;
-        if (lastAd !== today) newAdsWatched = 0; 
-
-        if (newAdsWatched >= AD_LIMIT_PER_DAY) throw new Error("已超过今日限制");
-
-        transaction.update(profileRef, {
-          balance: (data.balance || 0) + COIN_PER_AD, 
-          adsWatchedToday: newAdsWatched + 1,
-          lastAdDate: new Date().toISOString(),
-        });
-      });
-      alert(`恭喜！获得 ${COIN_PER_AD} 虚拟币奖励！`);
-      return true;
-    } catch (e) {
-      console.error("Ad transaction failed:", e);
-      alert(`奖励发放失败: ${e.message || e}`);
-      return false;
-    }
-  };
-
-  // Function to buy coins (simulated real-money transaction)
-  const buyCoins = async (amount, realCost) => {
-    if (!userId) return alert("请先登录。");
-    const profileRef = getProfileRef(userId);
-    if (!profileRef) return false;
-
-    console.log(`Simulating payment: Buying ${amount} coins for ¥ ${realCost}...`);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    try {
-      await runTransaction(db, async (transaction) => {
-          const docSnap = await transaction.get(profileRef);
-          if (!docSnap.exists()) throw new Error("用户数据不存在");
-          
-          const currentBalance = docSnap.data().balance || 0;
-          
-          transaction.update(profileRef, {
-            balance: currentBalance + amount, 
-          });
-      });
-
-      alert(`购买成功！获得 ${amount} 虚拟币！`);
-      return true;
-    } catch (e) {
-      console.error("Coin purchase failed:", e);
-      alert("购买失败，请稍后再试。");
-      return false;
-    }
-  };
-
-  // Function to buy an item using virtual currency
-  const buyItem = async (itemId, cost) => {
-    if (!userId) return alert("请先登录。");
-    const profileRef = getProfileRef(userId);
-    if (!profileRef) return false;
-
-    try {
-      await runTransaction(db, async (transaction) => {
-        const docSnap = await transaction.get(profileRef);
-        if (!docSnap.exists()) throw new Error("用户数据不存在");
-
-        const currentBalance = docSnap.data().balance || 0;
-        if (currentBalance < cost) throw new Error("余额不足");
-
-        // Update balance and inventory
-        const newInventory = { ...docSnap.data().inventory };
-        newInventory[itemId] = (newInventory[itemId] || 0) + 1;
-
-        transaction.update(profileRef, {
-          balance: currentBalance - cost,
-          inventory: newInventory,
-        });
-      });
-
-      if (cost > 0) {
-        alert(`购买成功！获得道具: ${itemId}`);
-      }
-      return true;
-    } catch (e) {
-      console.error("Item purchase failed:", e);
-      alert(`操作失败: ${e.message || e}`);
-      return false;
-    }
-  };
-  
-  // Function to consume an item
-  const useItem = async (itemId) => {
-      if (!userId) return alert("请先登录。");
-      const profileRef = getProfileRef(userId);
-      if (!profileRef) return false;
-      
-      try {
-          await runTransaction(db, async (transaction) => {
-              const docSnap = await transaction.get(profileRef);
-              if (!docSnap.exists()) throw new Error("用户数据不存在");
-
-              const currentInventory = docSnap.data().inventory || {};
-              if ((currentInventory[itemId] || 0) <= 0) throw new Error("库存不足");
-
-              // Decrement inventory
-              const newInventory = { ...currentInventory };
-              newInventory[itemId] = newInventory[itemId] - 1;
-
-              transaction.update(profileRef, {
-                  inventory: newInventory,
-              });
-          });
-          return true;
-      } catch (e) {
-          console.error("Item consumption failed:", e);
-          alert(`消耗失败: ${e.message || e}`);
-          return false;
-      }
-  }
-
-  const contextValue = {
-    balance,
-    inventory,
-    watchAd,
-    buyCoins,
-    buyItem,
-    useItem,
-    adsWatchedToday,
-    AD_LIMIT_PER_DAY,
-    loading,
-    userId,
-  };
-
-  // Use createElement instead of JSX
-  return e(
-    CurrencyContext.Provider, 
-    { value: contextValue }, 
-    children
-  );
-};
-
-// Hook to use currency system
-const useCurrency = () => useContext(CurrencyContext);
-
-// =================================================================
-// 4. REACT COMPONENTS (Pure JS with createElement)
-// =================================================================
-
-// Item Shop Component (Store)
-const Store = () => {
-  const { buyItem, inventory, adsWatchedToday, AD_LIMIT_PER_DAY, watchAd, buyCoins } = useCurrency();
-
-  const shopItems = [
-    { id: 'shield', name: '永久护盾', cost: 150, description: '在星际躲避中拥有额外一次护盾' },
-    { id: 'speed_boost', name: '速度药水', cost: 50, description: '贪吃蛇游戏开局速度提高' },
-    { id: 'cosmetic_skin', name: '飞船皮肤', cost: 200, description: '解锁飞船的炫酷皮肤' },
-  ];
-
-  const coinPacks = [
-    { amount: 50, cost: 0.99 },
-    { amount: 120, cost: 1.99 },
-    { amount: 300, cost: 4.99 },
-  ];
-
-  // Render Coin Packs Section
-  const renderCoinPacks = () => e('section', null,
-    e('h3', { className: 'text-xl font-semibold mb-3 text-indigo-400' }, '💰 购买虚拟币 (RMB)'),
-    e('div', { className: 'space-y-3' },
-      coinPacks.map(pack => e('button', {
-        key: pack.amount,
-        onClick: () => buyCoins(pack.amount, pack.cost),
-        className: 'w-full flex justify-between items-center p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md text-white font-medium'
-      },
-        e('span', null, `${pack.amount} 虚拟币`),
-        e('span', { className: 'text-sm bg-indigo-700 py-1 px-3 rounded-full' }, `¥ ${pack.cost}`)
-      ))
-    )
-  );
-
-  // Render Ad Section
-  const renderAdSection = () => e('section', null,
-    e('h3', { className: 'text-xl font-semibold mb-3 text-pink-400' }, '📺 免费获取 (看广告)'),
-    e('div', { className: 'space-y-3' },
-      e('p', { className: 'text-sm text-gray-400' }, `今日已看: ${adsWatchedToday} / ${AD_LIMIT_PER_DAY} 次`),
-      e('button', {
-        onClick: watchAd,
-        disabled: adsWatchedToday >= AD_LIMIT_PER_DAY,
-        className: `mt-1 w-full p-4 rounded-lg transition duration-150 font-bold ${
-          adsWatchedToday >= AD_LIMIT_PER_DAY 
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-            : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg'
-        }`
-      }, adsWatchedToday >= AD_LIMIT_PER_DAY ? '今日额度已用完' : `观看广告 (得 ${COIN_PER_AD} 币)`),
-      e('p', { className: 'text-xs text-gray-500 mt-2' }, '（此操作将更新您的 Firestore 账户数据）')
-    )
-  );
-
-  // Render Items Section
-  const renderShopItems = () => e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' },
-    shopItems.map(item => e('div', { key: item.id, className: 'p-4 bg-gray-700/70 rounded-lg border border-gray-600' },
-      e('h4', { className: 'font-semibold text-lg text-cyan-400' }, item.name),
-      e('p', { className: 'text-sm text-gray-400 mb-3' }, item.description),
-      e('div', { className: 'flex justify-between items-center' },
-        e('span', { className: 'text-base font-bold text-yellow-300' }, `${item.cost} 币`),
-        e('button', {
-          onClick: () => buyItem(item.id, item.cost),
-          className: 'bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-500 transition duration-150 text-sm'
-        }, `购买 (库存: ${inventory[item.id] || 0})`)
-      )
-    ))
-  );
-
-  // Store Top-level Render
-  return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
-    e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '虚拟货币商店'),
-    e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
-      renderCoinPacks(),
-      renderAdSection()
-    ),
-    e('h3', { className: 'text-2xl font-bold mt-8 mb-4 text-white' }, '购买游戏道具'),
-    renderShopItems()
-  );
-};
-
-
-// Game Panel Component (GamePanel)
-const GamePanel = () => {
-    const { inventory, balance, useItem } = useCurrency();
-    const hasShield = inventory['shield'] > 0;
-    const hasSpeedBoost = inventory['speed_boost'] > 0;
-
-    const [message, setMessage] = useState('开始游戏...');
-
-    const handleUseItem = async (itemId) => {
-        if(inventory[itemId] > 0) {
-            const success = await useItem(itemId); 
-            
-            if (success) {
-                setMessage(`已成功消耗道具: ${itemId}。游戏属性已生效！`);
-            } else {
-                setMessage(`道具消耗失败，请稍后再试。`);
+        // 1.2 Firebase Configuration (Injected via global variables or User's config)
+        let firebaseConfig = null;
+        // 检查是否在 Canvas 环境中运行（由 Canvas 注入 __firebase_config）
+        if (typeof __firebase_config !== 'undefined') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (error) {
+                console.error("Failed to parse Canvas Firebase config:", error);
+                firebaseConfig = {};
             }
         } else {
-            setMessage(`没有 ${itemId} 道具了，去商店看看吧。`);
+            // --- 重要：在此处粘贴您自己的 Firebase 配置对象 ---
+            // 如果您在 Canvas 外部运行此应用（例如在 GitHub Pages），您必须用
+            // 您的实际 Firebase 项目配置替换下面的占位符。
+            // 请从您的 Firebase 控制台获取这些值。
+            firebaseConfig = {
+                apiKey: "AIzaSyD0kALHxst8sqHLLhPNpRyuu-6VOD1tlHo",
+                authDomain: "aigame-store.firebaseapp.com",
+                projectId: "aigame-store",
+                storageBucket: "aigame-store.firebasestorage.app",
+                messagingSenderId: "227975426620",
+                appId: "1:227975426620:web:cac0a0ad8d8cea87de0939"
+            };
+
+            // 警告用户如果他们忘记替换占位符
+            if (firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+                console.error("FIREBASE 配置错误：请将此处的占位符配置替换为您自己的 Firebase 项目配置凭据。");
+                // 确保在外部运行时，如果未配置则使用空对象以防止崩溃，但会记录错误。
+                firebaseConfig = {};
+            }
+            // --- 配置块结束 ---
         }
-    }
+        // 确保 firebaseConfig 不为空，即使在外部未配置时。
+        if (!firebaseConfig) {
+            firebaseConfig = {};
+        }
 
-    const renderGameButton = (itemId, name, inventoryCount, hasItem) => e('div', { className: 'p-3 bg-indigo-900/50 rounded-lg' },
-        e('p', { className: 'text-lg font-semibold text-white' }, name),
-        e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventoryCount || 0}`),
-        e('button', {
-            onClick: () => handleUseItem(itemId),
-            disabled: !hasItem,
-            className: `mt-2 w-full py-2 rounded ${hasItem ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`
-        }, hasItem ? '使用' + name.split('(')[0].trim() : `无${name.split('(')[0].trim()}`)
-    );
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
-    // GamePanel Top-level Render
-    return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
-        e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '游戏区域模拟'),
-        e('div', { className: 'mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300' }, `当前余额: ${balance} 币`),
-        e('div', { className: 'grid grid-cols-2 gap-4' },
-            renderGameButton('shield', '星际躲避护盾', inventory['shield'], hasShield),
-            renderGameButton('speed_boost', '霓虹贪吃蛇药水', inventory['speed_boost'], hasSpeedBoost)
-        ),
-        e('p', { className: 'mt-4 text-center text-yellow-300' }, message)
-    );
-}
+        // Initialize Firebase services
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
 
-// Main Application Component (App)
-const App = () => {
-  const { isAuthReady } = useContext(AuthContext);
-  const { loading, userId } = useCurrency();
+        // Contexts
+        const AuthContext = createContext(null);
+        const CurrencyContext = createContext(null);
 
-  if (!isAuthReady || loading) {
-    return e('div', { className: 'min-h-screen flex items-center justify-center bg-gray-900 text-white' },
-      e('div', { className: 'animate-pulse' }, '正在初始化系统...')
-    );
-  }
+        // =================================================================
+        // 2. AUTHENTICATION PROVIDER (AuthProvider)
+        // =================================================================
 
-  // Header Render
-  const renderHeader = () => e('header', { className: 'text-center mb-8' },
-    e('h1', { className: 'text-4xl font-extrabold text-white mb-2' }, 'AI 游戏盈利系统演示'),
-    e('p', { className: 'text-sm text-gray-500' }, 
-      '当前用户 ID: ', 
-      e('span', { className: 'text-yellow-400 break-all' }, userId)
-    )
-  );
+        const AuthProvider = ({ children }) => {
+            const [userId, setUserId] = useState(null);
+            const [isAuthReady, setIsAuthReady] = useState(false);
 
-  // Footer Render
-  const renderFooter = () => e('footer', { className: 'text-center text-gray-600 pt-8' },
-    e('p', null, '数据实时同步于 Firestore 数据库。')
-  );
+            useEffect(() => {
+                const initAuth = async () => {
+                    try {
+                        if (initialAuthToken) {
+                            // Sign in using the provided custom token
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            // Fallback to anonymous sign-in for public access
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Firebase sign-in failed:", error);
+                    }
+                };
 
-  // App Top-level Render
-  return e('div', { className: 'min-h-screen bg-gray-900 p-8' },
-    renderHeader(),
-    e('main', { className: 'max-w-4xl mx-auto space-y-8' },
-      e(Store, null),
-      e(GamePanel, null)
-    ),
-    renderFooter()
-  );
-};
+                // Listen for auth state changes to get the final UID
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        setUserId(user.uid);
+                    } else {
+                        // If sign-in fails, use a random ID as fallback
+                        setUserId(crypto.randomUUID());
+                    }
+                    setIsAuthReady(true);
+                });
 
-// Ensure React application is rendered after the page loads
-window.onload = function() {
-    const rootElement = document.getElementById('root');
-    if (!rootElement) {
-        console.error("无法找到 #root 元素。");
-        return;
-    }
-    
-    // Use the new React 18 API to render the app wrapped in providers
-    createRoot(rootElement).render(
-        e(AuthProvider, null, 
-            e(CurrencyProvider, null, 
-                e(App, null)
-            )
-        )
-    );
-}
+                initAuth();
+                return () => unsubscribe();
+            }, []);
+
+            // Use createElement instead of JSX
+            return e(
+                AuthContext.Provider,
+                { value: { userId, db, isAuthReady } },
+                children
+            );
+        };
+
+        // =================================================================
+        // 3. CURRENCY AND INVENTORY MANAGEMENT (CurrencyProvider)
+        // =================================================================
+
+        const AD_LIMIT_PER_DAY = 5;
+        const COIN_PER_AD = 10;
+        const INITIAL_BALANCE = 100;
+
+        const CurrencyProvider = ({ children }) => {
+            const { userId, db, isAuthReady } = useContext(AuthContext);
+            const [balance, setBalance] = useState(0);
+            const [inventory, setInventory] = useState({});
+            const [adsWatchedToday, setAdsWatchedToday] = useState(0);
+            const [loading, setLoading] = useState(true);
+
+            // Firestore Document Reference Path function
+            const getProfileRef = useCallback((id) => {
+                if (!db || !id) return null;
+                // Private Data Path: /artifacts/{appId}/users/{userId}/data/profile
+                return doc(db, 'artifacts', appId, 'users', id, 'data', 'profile');
+            }, [db]);
+
+            // Real-time data synchronization and initialization
+            useEffect(() => {
+                if (!isAuthReady || !userId) return;
+
+                const profileRef = getProfileRef(userId);
+                if (!profileRef) return;
+
+                // Real-time listener
+                const unsubscribe = onSnapshot(profileRef, (docSnap) => {
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        const today = new Date().toDateString();
+                        const lastAd = new Date(data.lastAdDate || 0).toDateString();
+
+                        // Daily ad reset logic
+                        let currentAdsWatched = data.adsWatchedToday || 0;
+                        if (lastAd !== today) {
+                            currentAdsWatched = 0; // Reset count for a new day
+                        }
+
+                        setBalance(data.balance || 0);
+                        setInventory(data.inventory || {});
+                        setAdsWatchedToday(currentAdsWatched);
+                    } else {
+                        // Initialize data if document doesn't exist
+                        setBalance(INITIAL_BALANCE);
+                        setInventory({});
+                        setAdsWatchedToday(0);
+
+                        // Create the initial document
+                        setDoc(profileRef, {
+                            balance: INITIAL_BALANCE,
+                            inventory: {},
+                            lastAdDate: new Date(0).toISOString(),
+                            adsWatchedToday: 0,
+                        }, { merge: true }).catch(err => console.error("Failed to create initial data:", err));
+                    }
+                    setLoading(false);
+                }, (error) => {
+                    console.error("Firestore listener failed:", error);
+                    setLoading(false);
+                });
+
+                return () => unsubscribe();
+            }, [isAuthReady, userId, getProfileRef]);
+
+            // Function to watch ad and get coins (with daily limit)
+            const watchAd = async () => {
+                if (!userId || adsWatchedToday >= AD_LIMIT_PER_DAY) {
+                    alert("今日广告次数已达上限，请明天再试！");
+                    return false;
+                }
+
+                const profileRef = getProfileRef(userId);
+                if (!profileRef) return false;
+
+                console.log("Simulating ad playback...");
+                await new Promise(resolve => setTimeout(resolve, 1500));
+
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const docSnap = await transaction.get(profileRef);
+                        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+                        const data = docSnap.data();
+                        const today = new Date().toDateString();
+                        const lastAd = new Date(data.lastAdDate || 0).toDateString();
+
+                        let newAdsWatched = data.adsWatchedToday || 0;
+                        if (lastAd !== today) newAdsWatched = 0;
+
+                        if (newAdsWatched >= AD_LIMIT_PER_DAY) throw new Error("已超过今日限制");
+
+                        transaction.update(profileRef, {
+                            balance: (data.balance || 0) + COIN_PER_AD,
+                            adsWatchedToday: newAdsWatched + 1,
+                            lastAdDate: new Date().toISOString(),
+                        });
+                    });
+                    alert(`恭喜！获得 ${COIN_PER_AD} 虚拟币奖励！`);
+                    return true;
+                } catch (e) {
+                    console.error("Ad transaction failed:", e);
+                    alert(`奖励发放失败: ${e.message || e}`);
+                    return false;
+                }
+            };
+
+            // Function to buy coins (simulated real-money transaction)
+            const buyCoins = async (amount, realCost) => {
+                if (!userId) return alert("请先登录。");
+                const profileRef = getProfileRef(userId);
+                if (!profileRef) return false;
+
+                console.log(`Simulating payment: Buying ${amount} coins for ¥ ${realCost}...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const docSnap = await transaction.get(profileRef);
+                        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+                        const currentBalance = docSnap.data().balance || 0;
+
+                        transaction.update(profileRef, {
+                            balance: currentBalance + amount,
+                        });
+                    });
+
+                    alert(`购买成功！获得 ${amount} 虚拟币！`);
+                    return true;
+                } catch (e) {
+                    console.error("Coin purchase failed:", e);
+                    alert("购买失败，请稍后再试。");
+                    return false;
+                }
+            };
+
+            // Function to buy an item using virtual currency
+            const buyItem = async (itemId, cost) => {
+                if (!userId) return alert("请先登录。");
+                const profileRef = getProfileRef(userId);
+                if (!profileRef) return false;
+
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const docSnap = await transaction.get(profileRef);
+                        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+                        const currentBalance = docSnap.data().balance || 0;
+                        if (currentBalance < cost) throw new Error("余额不足");
+
+                        // Update balance and inventory
+                        const newInventory = { ...docSnap.data().inventory };
+                        newInventory[itemId] = (newInventory[itemId] || 0) + 1;
+
+                        transaction.update(profileRef, {
+                            balance: currentBalance - cost,
+                            inventory: newInventory,
+                        });
+                    });
+
+                    if (cost > 0) {
+                        alert(`购买成功！获得道具: ${itemId}`);
+                    }
+                    return true;
+                } catch (e) {
+                    console.error("Item purchase failed:", e);
+                    alert(`操作失败: ${e.message || e}`);
+                    return false;
+                }
+            };
+
+            // Function to consume an item
+            const useItem = async (itemId) => {
+                if (!userId) return alert("请先登录。");
+                const profileRef = getProfileRef(userId);
+                if (!profileRef) return false;
+
+                try {
+                    await runTransaction(db, async (transaction) => {
+                        const docSnap = await transaction.get(profileRef);
+                        if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+                        const currentInventory = docSnap.data().inventory || {};
+                        if ((currentInventory[itemId] || 0) <= 0) throw new Error("库存不足");
+
+                        // Decrement inventory
+                        const newInventory = { ...currentInventory };
+                        newInventory[itemId] = newInventory[itemId] - 1;
+
+                        transaction.update(profileRef, {
+                            inventory: newInventory,
+                        });
+                    });
+                    return true;
+                } catch (e) {
+                    console.error("Item consumption failed:", e);
+                    alert(`消耗失败: ${e.message || e}`);
+                    return false;
+                }
+            }
+
+            const contextValue = {
+                balance,
+                inventory,
+                watchAd,
+                buyCoins,
+                buyItem,
+                useItem,
+                adsWatchedToday,
+                AD_LIMIT_PER_DAY,
+                loading,
+                userId,
+            };
+
+            // Use createElement instead of JSX
+            return e(
+                CurrencyContext.Provider,
+                { value: contextValue },
+                children
+            );
+        };
+
+        // Hook to use currency system
+        const useCurrency = () => useContext(CurrencyContext);
+
+        // =================================================================
+        // 4. REACT COMPONENTS (Pure JS with createElement)
+        // =================================================================
+
+        // Item Shop Component (Store)
+        const Store = () => {
+            const { buyItem, inventory, adsWatchedToday, AD_LIMIT_PER_DAY, watchAd, buyCoins } = useCurrency();
+
+            const shopItems = [
+                { id: 'shield', name: '永久护盾', cost: 150, description: '在星际躲避中拥有额外一次护盾' },
+                { id: 'speed_boost', name: '速度药水', cost: 50, description: '贪吃蛇游戏开局速度提高' },
+                { id: 'cosmetic_skin', name: '飞船皮肤', cost: 200, description: '解锁飞船的炫酷皮肤' },
+            ];
+
+            const coinPacks = [
+                { amount: 50, cost: 0.99 },
+                { amount: 120, cost: 1.99 },
+                { amount: 300, cost: 4.99 },
+            ];
+
+            // Render Coin Packs Section
+            const renderCoinPacks = () => e('section', null,
+                e('h3', { className: 'text-xl font-semibold mb-3 text-indigo-400' }, '💰 购买虚拟币 (RMB)'),
+                e('div', { className: 'space-y-3' },
+                    coinPacks.map(pack => e('button', {
+                        key: pack.amount,
+                        onClick: () => buyCoins(pack.amount, pack.cost),
+                        className: 'w-full flex justify-between items-center p-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 transition duration-150 shadow-md text-white font-medium'
+                    },
+                        e('span', null, `${pack.amount} 虚拟币`),
+                        e('span', { className: 'text-sm bg-indigo-700 py-1 px-3 rounded-full' }, `¥ ${pack.cost}`)
+                    ))
+                )
+            );
+
+            // Render Ad Section
+            const renderAdSection = () => e('section', null,
+                e('h3', { className: 'text-xl font-semibold mb-3 text-pink-400' }, '📺 免费获取 (看广告)'),
+                e('div', { className: 'space-y-3' },
+                    e('p', { className: 'text-sm text-gray-400' }, `今日已看: ${adsWatchedToday} / ${AD_LIMIT_PER_DAY} 次`),
+                    e('button', {
+                        onClick: watchAd,
+                        disabled: adsWatchedToday >= AD_LIMIT_PER_DAY,
+                        className: `mt-1 w-full p-4 rounded-lg transition duration-150 font-bold ${adsWatchedToday >= AD_LIMIT_PER_DAY
+                                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                                : 'bg-pink-600 hover:bg-pink-500 text-white shadow-lg'
+                            }`
+                    }, adsWatchedToday >= AD_LIMIT_PER_DAY ? '今日额度已用完' : `观看广告 (得 ${COIN_PER_AD} 币)`),
+                    e('p', { className: 'text-xs text-gray-500 mt-2' }, '（此操作将更新您的 Firestore 账户数据）')
+                )
+            );
+
+            // Render Items Section
+            const renderShopItems = () => e('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' },
+                shopItems.map(item => e('div', { key: item.id, className: 'p-4 bg-gray-700/70 rounded-lg border border-gray-600' },
+                    e('h4', { className: 'font-semibold text-lg text-cyan-400' }, item.name),
+                    e('p', { className: 'text-sm text-gray-400 mb-3' }, item.description),
+                    e('div', { className: 'flex justify-between items-center' },
+                        e('span', { className: 'text-base font-bold text-yellow-300' }, `${item.cost} 币`),
+                        e('button', {
+                            onClick: () => buyItem(item.id, item.cost),
+                            className: 'bg-cyan-600 text-white px-4 py-2 rounded-lg hover:bg-cyan-500 transition duration-150 text-sm'
+                        }, `购买 (库存: ${inventory[item.id] || 0})`)
+                    )
+                ))
+            );
+
+            // Store Top-level Render
+            return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
+                e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '虚拟货币商店'),
+                e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-6' },
+                    renderCoinPacks(),
+                    renderAdSection()
+                ),
+                e('h3', { className: 'text-2xl font-bold mt-8 mb-4 text-white' }, '购买游戏道具'),
+                renderShopItems()
+            );
+        };
+
+
+        // Game Panel Component (GamePanel)
+        const GamePanel = () => {
+            const { inventory, balance, useItem } = useCurrency();
+            const hasShield = inventory['shield'] > 0;
+            const hasSpeedBoost = inventory['speed_boost'] > 0;
+
+            const [message, setMessage] = useState('开始游戏...');
+
+            const handleUseItem = async (itemId) => {
+                if (inventory[itemId] > 0) {
+                    const success = await useItem(itemId);
+
+                    if (success) {
+                        setMessage(`已成功消耗道具: ${itemId}。游戏属性已生效！`);
+                    } else {
+                        setMessage(`道具消耗失败，请稍后再试。`);
+                    }
+                } else {
+                    setMessage(`没有 ${itemId} 道具了，去商店看看吧。`);
+                }
+            }
+
+            const renderGameButton = (itemId, name, inventoryCount, hasItem) => e('div', { className: 'p-3 bg-indigo-900/50 rounded-lg' },
+                e('p', { className: 'text-lg font-semibold text-white' }, name),
+                e('p', { className: 'text-sm text-gray-400' }, `库存: ${inventoryCount || 0}`),
+                e('button', {
+                    onClick: () => handleUseItem(itemId),
+                    disabled: !hasItem,
+                    className: `mt-2 w-full py-2 rounded ${hasItem ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`
+                }, hasItem ? '使用' + name.split('(')[0].trim() : `无${name.split('(')[0].trim()}`)
+            );
+
+            // GamePanel Top-level Render
+            return e('div', { className: 'p-6 bg-gray-800/50 rounded-xl shadow-lg border border-gray-700/50 backdrop-blur-md' },
+                e('h2', { className: 'text-2xl font-bold mb-4 text-white' }, '游戏区域模拟'),
+                e('div', { className: 'mb-4 p-4 bg-gray-700 rounded-lg text-lg font-mono text-green-300' }, `当前余额: ${balance} 币`),
+                e('div', { className: 'grid grid-cols-2 gap-4' },
+                    renderGameButton('shield', '星际躲避护盾', inventory['shield'], hasShield),
+                    renderGameButton('speed_boost', '霓虹贪吃蛇药水', inventory['speed_boost'], hasSpeedBoost)
+                ),
+                e('p', { className: 'mt-4 text-center text-yellow-300' }, message)
+            );
+        }
+
+        // Main Application Component (App)
+        const App = () => {
+            const { isAuthReady } = useContext(AuthContext);
+            const { loading, userId } = useCurrency();
+
+            if (!isAuthReady || loading) {
+                return e('div', { className: 'min-h-screen flex items-center justify-center bg-gray-900 text-white' },
+                    e('div', { className: 'animate-pulse' }, '正在初始化系统...')
+                );
+            }
+
+            // Header Render
+            const renderHeader = () => e('header', { className: 'text-center mb-8' },
+                e('h1', { className: 'text-4xl font-extrabold text-white mb-2' }, 'AI 游戏盈利系统演示'),
+                e('p', { className: 'text-sm text-gray-500' },
+                    '当前用户 ID: ',
+                    e('span', { className: 'text-yellow-400 break-all' }, userId)
+                )
+            );
+
+            // Footer Render
+            const renderFooter = () => e('footer', { className: 'text-center text-gray-600 pt-8' },
+                e('p', null, '数据实时同步于 Firestore 数据库。')
+            );
+
+            // App Top-level Render
+            return e('div', { className: 'min-h-screen bg-gray-900 p-8' },
+                renderHeader(),
+                e('main', { className: 'max-w-4xl mx-auto space-y-8' },
+                    e(Store, null),
+                    e(GamePanel, null)
+                ),
+                renderFooter()
+            );
+        };
+
+        // Ensure React application is rendered after the page loads
+        window.onload = function () {
+            const rootElement = document.getElementById('root');
+            if (!rootElement) {
+                console.error("无法找到 #root 元素。");
+                return;
+            }
+
+            // Use the new React 18 API to render the app wrapped in providers
+            createRoot(rootElement).render(
+                e(AuthProvider, null,
+                    e(CurrencyProvider, null,
+                        e(App, null)
+                    )
+                )
+            );
+        }
     </script>
 </body>
 </html>
