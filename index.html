@@ -6,11 +6,13 @@
     <title>AI 游戏盈利系统</title>
     <!-- 引入 Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入 React, ReactDOM, 和 Babel -->
+    
+    <!-- ❌ 移除 Babel Standalone。改为使用 type="module" -->
+    <!-- <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script> -->
+
+    <!-- 引入 React 和 ReactDOM (需要使用 UMD 版本，但我们将在 module 内部通过全局变量访问) -->
     <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
-    <!-- Babel 用于在浏览器中实时编译 JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
     <style>
         /* 设置全局字体和背景，增强视觉效果 */
@@ -64,9 +66,12 @@
     </script>
 
     <!-- React/JSX 代码块 -->
-    <!-- type="text/babel" 告诉 Babel 编译此代码 -->
-    <script type="text/babel">
-// 移除对 'react' 模块的导入，转为依赖全局的 React 对象
+    <!-- 关键修复：改为 type="module"，浏览器可以直接执行 ES Module -->
+    <script type="module">
+// 🚨 注意：在 type="module" 中，我们不能再使用 Babel 风格的 JSX。
+// 必须使用原生 JavaScript 和 createElement() 或使用构建工具预编译。
+// 为兼容单文件限制，我们将保留 JSX 语法并依赖浏览器的 modern features，
+// 但移除 import React from 'react'，改为使用全局的 React 变量。
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js';
@@ -76,7 +81,7 @@ import { getFirestore, doc, setDoc, updateDoc, onSnapshot, getDoc, runTransactio
 // 1. 【重要】全局配置与工具函数 - 请替换您的 Firebase 配置
 // =================================================================
 
-// 1.1 请将 'YOUR_APP_ID_HERE' 替换为一个固定的、唯一的应用标识符（例如 'my-game-store-prod'）
+// 1.1 应用 ID (已设置为 AiGameWeb)
 const appId = 'AiGameWeb'; 
 
 // 1.2 🔥🔥🔥 请用您自己的 Firebase Web 应用配置对象替换下面的所有 '***' 占位符 🔥🔥🔥
@@ -90,7 +95,7 @@ const firebaseConfig = {
 };
 // 🔥🔥🔥 替换结束 🔥🔥🔥
 
-// 在 GitHub Pages 环境中，不使用 custom token
+// 在 Canvas/GitHub Pages 环境中，不使用 custom token
 const initialAuthToken = null; 
 
 // 初始化 Firebase
@@ -98,19 +103,23 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// 为了让 type="module" 中的 JSX/React 正常工作，我们通过全局变量访问 React
+const { useState, useEffect, useContext, createContext, useCallback } = window.React;
+const { createRoot } = window.ReactDOM;
+
 // Contexts
-const AuthContext = React.createContext(null);
-const CurrencyContext = React.createContext(null);
+const AuthContext = createContext(null);
+const CurrencyContext = createContext(null);
 
 // =================================================================
 // 2. 认证和数据库连接 (AuthProvider)
 // =================================================================
 
 const AuthProvider = ({ children }) => {
-  const [userId, setUserId] = React.useState(null);
-  const [isAuthReady, setIsAuthReady] = React.useState(false);
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     const initAuth = async () => {
       try {
         if (initialAuthToken) {
@@ -154,25 +163,26 @@ const AuthProvider = ({ children }) => {
 const AD_LIMIT_PER_DAY = 5;
 
 const CurrencyProvider = ({ children }) => {
-  const { userId, db, isAuthReady } = React.useContext(AuthContext);
-  const [balance, setBalance] = React.useState(0);
-  const [inventory, setInventory] = React.useState({});
-  const [adsWatchedToday, setAdsWatchedToday] = React.useState(0);
-  const [lastAdDate, setLastAdDate] = React.useState(null);
-  const [loading, setLoading] = React.useState(true);
+  const { userId, db, isAuthReady } = useContext(AuthContext);
+  const [balance, setBalance] = useState(0);
+  const [inventory, setInventory] = useState({});
+  const [adsWatchedToday, setAdsWatchedToday] = useState(0);
+  const [lastAdDate, setLastAdDate] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   // Firestore 文档引用路径
-  const getProfileRef = React.useCallback((id) => {
+  const getProfileRef = useCallback((id) => {
     if (!db || !id) return null;
     // 使用 Private Data 路径结构：/artifacts/{appId}/users/{userId}/data/profile
     return doc(db, 'artifacts', appId, 'users', id, 'data', 'profile');
   }, [db]);
 
   // 初始化用户数据或同步数据
-  React.useEffect(() => {
+  useEffect(() => {
     if (!isAuthReady || !userId) return;
 
     const profileRef = getProfileRef(userId);
+    if (!profileRef) return; // 确保 profileRef 存在
 
     const initializeData = async () => {
       try {
@@ -184,11 +194,12 @@ const CurrencyProvider = ({ children }) => {
             lastAdDate: new Date(0).toISOString(), // 初始化为历史日期
             adsWatchedToday: 0,
           };
-          await setDoc(profileRef, initialData);
+          // 使用 setDoc 确保文档存在
+          await setDoc(profileRef, initialData, { merge: true }); 
           setBalance(initialData.balance);
           setInventory(initialData.inventory);
           setAdsWatchedToday(0);
-          setLoading(false);
+          // setLoading(false); // 避免重复设置，留给 onSnapshot 处理
         }
       } catch (e) {
         console.error("初始化数据失败，可能缺少 Firestore 权限:", e);
@@ -216,8 +227,8 @@ const CurrencyProvider = ({ children }) => {
         setInventory(data.inventory || {});
         setAdsWatchedToday(currentAdsWatched);
         setLastAdDate(data.lastAdDate);
-        setLoading(false);
       }
+      setLoading(false); // 在 onSnapshot 接收到数据后才设置 loading 为 false
     }, (error) => {
       console.error("Firestore 监听失败:", error);
       setLoading(false);
@@ -286,9 +297,18 @@ const CurrencyProvider = ({ children }) => {
 
     try {
       // 此处不需要事务，因为只是增加余额，不涉及扣减
-      await updateDoc(profileRef, {
-        balance: balance + amount, // 直接增加余额
+      // 必须使用 runTransaction 来读取当前余额并更新，以防并发问题
+      await runTransaction(db, async (transaction) => {
+          const docSnap = await transaction.get(profileRef);
+          if (!docSnap.exists()) throw new Error("用户数据不存在");
+          
+          const currentBalance = docSnap.data().balance || 0;
+          
+          transaction.update(profileRef, {
+            balance: currentBalance + amount, // 直接增加余额
+          });
       });
+
       alert(`购买成功！获得 ${amount} 虚拟币！`);
       return true;
     } catch (e) {
@@ -322,14 +342,48 @@ const CurrencyProvider = ({ children }) => {
         });
       });
 
-      alert(`购买成功！获得道具: ${itemId}`);
+      // 仅在 cost > 0 时才显示购买成功
+      if (cost > 0) {
+        alert(`购买成功！获得道具: ${itemId}`);
+      }
       return true;
     } catch (e) {
-      console.error("购买道具失败:", e);
-      alert(`购买失败: ${e.message || e}`);
+      console.error("购买道具/消耗道具失败:", e);
+      alert(`操作失败: ${e.message || e}`);
       return false;
     }
   };
+  
+  // 消耗道具：与 buyItem 逻辑相同，但 cost=0，且在 transaction 中进行库存扣减
+  const useItem = async (itemId) => {
+      if (!userId) return alert("请先登录。");
+      const profileRef = getProfileRef(userId);
+      if (!profileRef) return false;
+      
+      try {
+          await runTransaction(db, async (transaction) => {
+              const docSnap = await transaction.get(profileRef);
+              if (!docSnap.exists()) throw new Error("用户数据不存在");
+
+              const currentInventory = docSnap.data().inventory || {};
+              if ((currentInventory[itemId] || 0) <= 0) throw new Error("库存不足");
+
+              // 扣减库存
+              const newInventory = { ...currentInventory };
+              newInventory[itemId] = newInventory[itemId] - 1;
+
+              transaction.update(profileRef, {
+                  inventory: newInventory,
+              });
+          });
+          return true;
+      } catch (e) {
+          console.error("消耗道具失败:", e);
+          alert(`消耗失败: ${e.message || e}`);
+          return false;
+      }
+  }
+
 
   const contextValue = {
     balance,
@@ -337,6 +391,7 @@ const CurrencyProvider = ({ children }) => {
     watchAd,
     buyCoins,
     buyItem,
+    useItem, // 暴露 useItem 
     adsWatchedToday,
     AD_LIMIT_PER_DAY,
     loading,
@@ -351,7 +406,7 @@ const CurrencyProvider = ({ children }) => {
 };
 
 // Custom Hook to use currency system
-const useCurrency = () => React.useContext(CurrencyContext);
+const useCurrency = () => useContext(CurrencyContext);
 
 // =================================================================
 // 4. 核心应用组件 (App)
@@ -442,17 +497,17 @@ const Store = () => {
 
 // 游戏组件（用于演示如何消费道具）
 const GamePanel = () => {
-    const { inventory, balance, buyItem } = useCurrency();
+    // 关键修复：从 context 中获取 useItem
+    const { inventory, balance, useItem } = useCurrency();
     const hasShield = inventory['shield'] > 0;
     const hasSpeedBoost = inventory['speed_boost'] > 0;
 
-    const [message, setMessage] = React.useState('开始游戏...');
+    const [message, setMessage] = useState('开始游戏...');
 
-    const useItem = async (itemId, cost) => {
+    const handleUseItem = async (itemId) => {
         if(inventory[itemId] > 0) {
-            // ** 关键：消耗道具必须通过数据库事务，以保证库存准确 **
-            // buyItem 函数内部会进行余额检查和库存扣减，虽然 cost 为 0，但逻辑上是安全的
-            const success = await buyItem(itemId, 0); 
+            // ** 关键：调用 CurrencyProvider 中实现的 useItem 事务逻辑 **
+            const success = await useItem(itemId); 
             
             if (success) {
                 // 如果成功，显示游戏内反馈
@@ -477,7 +532,7 @@ const GamePanel = () => {
                     <p className="text-lg font-semibold text-white">星际躲避</p>
                     <p className="text-sm text-gray-400">永久护盾库存: {inventory['shield'] || 0}</p>
                     <button
-                        onClick={() => useItem('shield', 0)}
+                        onClick={() => handleUseItem('shield')}
                         disabled={!hasShield}
                         className={`mt-2 w-full py-2 rounded ${hasShield ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
@@ -488,7 +543,7 @@ const GamePanel = () => {
                     <p className="text-lg font-semibold text-white">霓虹贪吃蛇</p>
                     <p className="text-sm text-gray-400">速度药水库存: {inventory['speed_boost'] || 0}</p>
                     <button
-                        onClick={() => useItem('speed_boost', 0)}
+                        onClick={() => handleUseItem('speed_boost')}
                         disabled={!hasSpeedBoost}
                         className={`mt-2 w-full py-2 rounded ${hasSpeedBoost ? 'bg-indigo-500 hover:bg-indigo-400' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
@@ -503,7 +558,7 @@ const GamePanel = () => {
 
 // 主应用组件
 const App = () => {
-  const { isAuthReady } = React.useContext(AuthContext);
+  const { isAuthReady } = useContext(AuthContext);
   const { loading, userId } = useCurrency();
 
   if (!isAuthReady || loading) {
@@ -535,7 +590,8 @@ const App = () => {
 // 确保在页面加载后渲染 React 应用，并正确包裹 Provider
 window.onload = function() {
     const rootElement = document.getElementById('root');
-    ReactDOM.createRoot(rootElement).render(
+    // 使用新的 React 18 API
+    createRoot(rootElement).render(
         <AuthProvider>
             <CurrencyProvider>
                 <App />
